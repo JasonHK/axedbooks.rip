@@ -21,6 +21,13 @@ const { t: translate } = useI18n(
     { locals: { ...Astro.locals }, url: Astro.url },
     { locale },
 );
+const pageTitle = title
+    ? `${title} | Axed Books`
+    : `Axed Books | ${translate("catalogTitle")}`;
+const pageDescription = translate("intro");
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
+const openGraphLocale =
+    locale === "zh-hant" ? "zh_TW" : locale === "zh-hans" ? "zh_CN" : "en_US";
 const languages = [
     { locale: "zh-hant", label: "繁體中文", lang: "zh-Hant" },
     { locale: "zh-hans", label: "简体中文", lang: "zh-Hans" },
@@ -51,9 +58,18 @@ const languages = [
         </script>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content={translate("intro")} />
-        <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
-        <title>{title ? `${title} | Axed Books` : `Axed Books | ${translate("catalogTitle")}`}</title>
+        <meta name="description" content={pageDescription} />
+        <link rel="canonical" href={canonicalUrl} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Axed Books" />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:url" content={canonicalUrl} />
+        <meta property="og:locale" content={openGraphLocale} />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDescription} />
+        <title>{pageTitle}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
             rel="preconnect"

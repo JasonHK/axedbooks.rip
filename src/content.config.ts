@@ -29,7 +29,7 @@ const books = defineCollection({
                 .or(z.number().int().positive()),
             lastPublishedDate: z.date(),
             status: z
-                .enum(["releasing", "hiatus", "cancelled", "finished"])
+                .enum(["ongoing", "hiatus", "axed", "finished"])
                 .optional(),
             sourcePublisher: nonempty.optional(),
             legacySlug: nonempty

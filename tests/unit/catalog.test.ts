@@ -4,6 +4,8 @@ import {
     bookRouteParams,
     bookStatus,
     catalogBooks,
+    catalogIndexBooks,
+    catalogPageNumbers,
     latestVolume,
     normalize,
     validateBooks,
@@ -157,6 +159,60 @@ it("keeps independent root books in the catalog but hides referenced sources", (
     ]);
 });
 
+it("creates an axed-only, oldest-first catalog index", () =>
+{
+    const publishers = [
+        { id: "original-publisher", data: { name: "Original", origin: "JP" } },
+        { id: "local-publisher", data: { name: "Local", origin: "TW" } },
+        {
+            id: "independent-publisher",
+            data: { name: "Independent", origin: "US" },
+        },
+    ];
+    const axedSource = {
+        ...root,
+        data: { ...root.data, status: "axed" as const },
+    };
+    const oldTranslation = {
+        ...translation,
+        data: {
+            ...translation.data,
+            lastPublishedDate: new Date("2020-01-01T00:00:00Z"),
+        },
+    };
+    const ongoingBook = {
+        ...root,
+        id: "independent-publisher/manga/ongoing",
+    };
+
+    const index = catalogIndexBooks(
+        [axedSource, oldTranslation, ongoingBook],
+        publishers,
+    );
+    expect(index).toMatchObject([
+        {
+            id: oldTranslation.id,
+            publisherName: "Local",
+            origin: "TW",
+            format: "manga",
+            status: "axed",
+            statusEstimated: true,
+            gap: 6,
+            sourceTitle: "Original",
+        },
+    ]);
+    expect(index.map((book) => book.id)).not.toContain(axedSource.id);
+    expect(index.map((book) => book.id)).not.toContain(ongoingBook.id);
+});
+
+it("generates only numbered routes after the first page", () =>
+{
+    expect(catalogPageNumbers(0)).toStrictEqual([]);
+    expect(catalogPageNumbers(12)).toStrictEqual([]);
+    expect(catalogPageNumbers(13)).toStrictEqual([2]);
+    expect(catalogPageNumbers(37)).toStrictEqual([2, 3, 4]);
+});
+
 it("compares linked volume counts automatically", () =>
 {
     expect(volumeGap(translation, root)).toBe(6);
@@ -207,7 +263,21 @@ it("derives edition status from linked sources and calendar-month thresholds", (
             lastPublishedDate: new Date(`${date}T00:00:00Z`),
         },
     });
-    expect(bookStatus(root, undefined, now)).toBe("releasing");
+    expect(bookStatus(root, undefined, now)).toBe("ongoing");
+    expect(
+        bookStatus(
+            { ...root, data: { ...root.data, status: "ongoing" } },
+            undefined,
+            now,
+        ),
+    ).toBe("ongoing");
+    expect(
+        bookStatus(
+            { ...root, data: { ...root.data, status: "axed" } },
+            undefined,
+            now,
+        ),
+    ).toBe("axed");
     expect(
         bookStatus({ ...root, data: { ...root.data, status: "finished" } }),
     ).toBe("finished");
@@ -218,24 +288,24 @@ it("derives edition status from linked sources and calendar-month thresholds", (
             now,
         ),
     ).toBe("hiatus");
-    expect(bookStatus(translation, undefined, now)).toBe("releasing");
-    expect(
-        bookStatus(edition("2020-01-01", 10), original("cancelled"), now),
-    ).toBe("finished");
+    expect(bookStatus(translation, undefined, now)).toBe("ongoing");
+    expect(bookStatus(edition("2020-01-01", 10), original("axed"), now)).toBe(
+        "finished",
+    );
     expect(bookStatus(edition("2020-01-01", 11), original("hiatus"), now)).toBe(
         "hiatus",
     );
-    expect(bookStatus(edition("2025-11-14"), original("cancelled"), now)).toBe(
-        "releasing",
+    expect(bookStatus(edition("2025-11-14"), original("axed"), now)).toBe(
+        "ongoing",
     );
-    expect(bookStatus(edition("2025-11-13"), original("cancelled"), now)).toBe(
-        "cancelled",
+    expect(bookStatus(edition("2025-11-13"), original("axed"), now)).toBe(
+        "axed",
     );
     expect(bookStatus(edition("2025-05-14"), original("finished"), now)).toBe(
-        "releasing",
+        "ongoing",
     );
     expect(bookStatus(edition("2025-05-13"), original("finished"), now)).toBe(
-        "cancelled",
+        "axed",
     );
     expect(
         bookStatus(
@@ -250,9 +320,9 @@ it("derives edition status from linked sources and calendar-month thresholds", (
             original("finished", "2026-11-01"),
             now,
         ),
-    ).toBe("cancelled");
+    ).toBe("axed");
     expect(bookStatus(edition("2025-05-14"), original("hiatus"), now)).toBe(
-        "releasing",
+        "ongoing",
     );
     expect(bookStatus(edition("2025-05-13"), original("hiatus"), now)).toBe(
         "hiatus",
@@ -261,23 +331,23 @@ it("derives edition status from linked sources and calendar-month thresholds", (
         "hiatus",
     );
     expect(bookStatus(edition("2024-11-13"), original("hiatus"), now)).toBe(
-        "cancelled",
+        "axed",
     );
-    expect(bookStatus(edition("2025-11-14"), original("releasing"), now)).toBe(
-        "releasing",
+    expect(bookStatus(edition("2025-11-14"), original("ongoing"), now)).toBe(
+        "ongoing",
     );
-    expect(bookStatus(edition("2025-11-13"), original("releasing"), now)).toBe(
+    expect(bookStatus(edition("2025-11-13"), original("ongoing"), now)).toBe(
         "hiatus",
     );
-    expect(bookStatus(edition("2024-11-14"), original("releasing"), now)).toBe(
+    expect(bookStatus(edition("2024-11-14"), original("ongoing"), now)).toBe(
         "hiatus",
     );
-    expect(bookStatus(edition("2024-11-13"), original("releasing"), now)).toBe(
-        "cancelled",
+    expect(bookStatus(edition("2024-11-13"), original("ongoing"), now)).toBe(
+        "axed",
     );
-    expect(
-        bookStatus(edition("2020-01-01", 9), original("releasing"), now),
-    ).toBe("releasing");
+    expect(bookStatus(edition("2020-01-01", 9), original("ongoing"), now)).toBe(
+        "ongoing",
+    );
     expect(
         bookStatus(
             edition("2024-02-29"),
@@ -291,7 +361,7 @@ it("derives edition status from linked sources and calendar-month thresholds", (
             original("hiatus"),
             new Date("2026-03-01T00:00:00Z"),
         ),
-    ).toBe("cancelled");
+    ).toBe("axed");
 });
 
 it("normalizes full-width and case variants", () =>

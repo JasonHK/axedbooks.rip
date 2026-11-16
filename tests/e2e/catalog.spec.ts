@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const bookPath = "ching-win/light-novel/her-royal-highness-seems-to-be-angry";
 const mangaPath = "jade-dynasty/manga/ruri-dragon";
@@ -6,22 +6,66 @@ const bookTitle = "公主殿下貌似大發雷霆";
 const bookCover =
     "/covers/ching-win/light-novel/her-royal-highness-seems-to-be-angry.jpg";
 
+async function mockCatalog(page: Page, count: number)
+{
+    await page.route("**/catalog.json", (route) =>
+        route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify(
+                Array.from({ length: count }, (_, index) => ({
+                    id:
+                        index === 0
+                            ? bookPath
+                            : `ching-win/light-novel/fixture-${index}`,
+                    title:
+                        index === 0
+                            ? `${bookTitle} fixture-match`
+                            : index < 5
+                              ? `fixture-match ${index}`
+                              : `fixture-other ${index}`,
+                    authors: ["Fixture Author"],
+                    publisherId: "ching-win",
+                    publisherName: "青文",
+                    format:
+                        index < Math.min(17, Math.floor(count / 2))
+                            ? "manga"
+                            : "light-novel",
+                    origin: "TW",
+                    language: "zh-Hant",
+                    lastPublishedDate: new Date(
+                        Date.UTC(1990 + index, 0, 1),
+                    ).toISOString(),
+                    volume: index + 1,
+                    gap: index % 4,
+                    status: "axed",
+                    statusEstimated: index % 2 === 0,
+                    sourceTitle:
+                        index === 0 ? "王女殿下はお怒りのようです" : undefined,
+                    cover: index === 0 ? bookCover : undefined,
+                    fictional: false,
+                })),
+            ),
+        }),
+    );
+}
+
 test("search, filters, sorting, views and URL state work together", async ({
     page,
 }) =>
 {
+    await mockCatalog(page, 4);
     await page.goto("/en/");
-    const statusFilter = page.getByLabel("Publication status");
-    await expect(statusFilter).toHaveValue("cancelled");
-    await expect(page.locator(".book-card:visible")).not.toHaveCount(0);
-    await expect(page).toHaveURL(/status=cancelled/);
+    const cards = page.locator(".book-card:visible");
+    await expect(cards).toHaveCount(4);
+    await expect(page.locator('[data-filter="status"]')).toHaveCount(0);
+    await expect(page).not.toHaveURL(/status=/);
     expect(
         await page
             .locator(".book-card:visible")
             .evaluateAll((cards) =>
                 cards.every(
                     (card) =>
-                        card.getAttribute("data-status") === "cancelled" &&
+                        card.getAttribute("data-status") === "axed" &&
                         card
                             .querySelector(".status-badge")
                             ?.textContent?.trim() === "Axed",
@@ -35,20 +79,26 @@ test("search, filters, sorting, views and URL state work together", async ({
     await page.getByLabel("Search books").fill("nothing matches");
     await expect(page.getByText("No books found")).toBeVisible();
     await page.getByRole("button", { name: "Clear filters" }).click();
-    await expect(statusFilter).toHaveValue("cancelled");
-    await statusFilter.selectOption("");
+    await page
+        .locator("#filter-format")
+        .evaluate((element) =>
+            (element as HTMLSelectElement).add(
+                new Option("Manga fixture", "manga"),
+            ),
+        );
     await page.getByLabel("Format").selectOption("manga");
     await expect(page.locator(".book-card:visible")).toHaveCount(2);
     await page.getByLabel("Sort").selectOption("volume-desc");
     await expect(page.locator(".book-card:visible").first()).toHaveAttribute(
         "data-volume",
-        "5",
+        "2",
     );
+    await page.getByRole("button", { name: "Clear" }).click();
     await page.getByRole("button", { name: "List view" }).click();
     await expect(page.locator("#book-list")).toHaveClass(/list-view/);
     await expect(page).toHaveURL(/view=list/);
     await page.reload();
-    await expect(page.locator(".book-card:visible")).toHaveCount(2);
+    await expect(page.locator(".book-card:visible")).toHaveCount(4);
     await expect(
         page.getByRole("button", { name: "List view" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -62,48 +112,25 @@ test("pagination handles page sizes, filters, URL state and history", async ({
     page,
 }) =>
 {
-    await page.route("**/en/**", async (route) =>
-    {
-        if (route.request().resourceType() !== "document")
-            return route.continue();
-        const response = await route.fetch();
-        const html = await response.text();
-        const fixture = `<script>
-      const list = document.querySelector('#book-list');
-      const originals = [...list.querySelectorAll('.book-card')];
-            list.replaceChildren();
-            for (let index = 0; index < 44; index++) {
-        const clone = originals[index % originals.length].cloneNode(true);
-        clone.dataset.id = 'fixture-' + index;
-                clone.dataset.format = index < 17 ? 'manga' : 'light-novel';
-                clone.dataset.search = index < 5 ? 'fixture-match' : 'fixture-other';
-        list.append(clone);
-      }
-    </script>`;
-        await route.fulfill({
-            response,
-            body: html.replace("</body>", `${fixture}</body>`),
-        });
-    });
-
-    await page.goto("/en/?status=all");
+    await mockCatalog(page, 44);
+    await page.goto("/en/");
     const cards = page.locator(".book-card:visible");
-    const previous = page.getByRole("button", { name: "Previous page" });
-    const next = page.getByRole("button", { name: "Next page" });
+    const previous = page.locator("#previous-page");
+    const next = page.locator("#next-page");
     const size = page.getByLabel("Books per page");
     await expect(cards).toHaveCount(12);
     await expect(page.locator("#result-count")).toHaveText("44");
     await expect(page.locator("#result-range")).toHaveText("01—12");
     await expect(page.locator("#page-status")).toHaveText("Page 1 of 4");
-    await expect(previous).toBeDisabled();
+    await expect(previous).toHaveAttribute("aria-disabled", "true");
     await next.click();
     await expect(cards).toHaveCount(12);
     await expect(page.locator("#result-range")).toHaveText("13—24");
-    await expect(page).toHaveURL(/page=2/);
+    await expect(page).toHaveURL(/\/en\/page\/2\/$/);
     await next.click();
     await next.click();
     await expect(cards).toHaveCount(8);
-    await expect(next).toBeDisabled();
+    await expect(next).toHaveAttribute("aria-disabled", "true");
     await previous.click();
     await expect(page.locator("#page-status")).toHaveText("Page 3 of 4");
     await page.goBack();
@@ -111,9 +138,10 @@ test("pagination handles page sizes, filters, URL state and history", async ({
     await size.selectOption("24");
     await expect(cards).toHaveCount(24);
     await expect(page.locator("#page-status")).toHaveText("Page 1 of 2");
-    await expect(page).toHaveURL(/perPage=24/);
+    await expect(page).toHaveURL(/\/en\/\?perPage=24$/);
     await next.click();
     await expect(cards).toHaveCount(20);
+    await expect(page).toHaveURL(/\/en\/page\/2\/\?perPage=24$/);
     await size.selectOption("36");
     await expect(cards).toHaveCount(36);
     await next.click();
@@ -122,9 +150,16 @@ test("pagination handles page sizes, filters, URL state and history", async ({
     await expect(cards).toHaveCount(5);
     await expect(page.locator("#page-status")).toHaveText("Page 1 of 1");
     await expect(page.locator("#result-count")).toHaveText("5");
-    await expect(page).not.toHaveURL(/page=2/);
+    await expect(page).not.toHaveURL(/\/page\/2\//);
     await page.getByLabel("Search books").clear();
     await size.selectOption("12");
+    await page
+        .locator("#filter-format")
+        .evaluate((element) =>
+            (element as HTMLSelectElement).add(
+                new Option("Manga fixture", "manga"),
+            ),
+        );
     await page.getByLabel("Format").selectOption("manga");
     await expect(page.locator("#result-count")).toHaveText("17");
     await expect(cards).toHaveCount(12);
@@ -138,13 +173,13 @@ test("pagination handles page sizes, filters, URL state and history", async ({
     await expect(page.getByText("No books found")).toBeVisible();
 
     await page.goto("/en/?perPage=12&page=999&status=all");
-    await expect(cards).toHaveCount(8);
-    await expect(page.locator("#page-status")).toHaveText("Page 4 of 4");
-    await expect(page).toHaveURL(/page=4/);
+    await expect(cards).toHaveCount(12);
+    await expect(page.locator("#page-status")).toHaveText("Page 1 of 4");
+    await expect(page).toHaveURL(/\/en\/$/);
     await page.goto("/en/?perPage=13&page=0&status=all");
     await expect(cards).toHaveCount(12);
     await expect(size).toHaveValue("12");
-    await expect(page).toHaveURL(/\/en\/\?status=all$/);
+    await expect(page).toHaveURL(/\/en\/$/);
 });
 
 test("locale switching preserves state and detail pages show original comparison", async ({
@@ -158,23 +193,24 @@ test("locale switching preserves state and detail pages show original comparison
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hans");
     await page.goto(`/en/${bookPath}/`);
     await expect(page.getByText("Original edition")).toBeVisible();
-    await expect(page.locator("dd").filter({ hasText: "Volume 6" })).toHaveText(
-        "Volume 6",
-    );
+    await expect(
+        page.locator("dd").filter({ hasText: "Volume 6 (Behind by 3 volumes)" }),
+    ).toHaveText("Volume 6 (Behind by 3 volumes)");
     await expect(page.locator("dd").filter({ hasText: "Volume 9" })).toHaveText(
         "Volume 9",
     );
     await expect(page.getByText("王女殿下はお怒りのようです")).toBeVisible();
     await expect(page.getByText("Behind by 3 volumes")).toBeVisible();
+    await expect(page.getByText("Finished", { exact: true })).toBeVisible();
     await expect(page.getByText("Estimated publication status")).toBeVisible();
     await expect(page.getByText("Axed", { exact: true })).toBeVisible();
     await page.locator("#language-menu summary").click();
     await page.getByRole("link", { name: "繁體中文" }).click();
     await expect(page).toHaveURL(new RegExp(`/zh-hant/${bookPath}/`));
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
-    await expect(page.locator("dd").filter({ hasText: "第 6 集" })).toHaveText(
-        "第 6 集",
-    );
+    await expect(
+        page.locator("dd").filter({ hasText: "第 6 集（落後 3 集）" }),
+    ).toHaveText("第 6 集（落後 3 集）");
 });
 
 test("book language tags render as language names", async ({ page }) =>
@@ -194,12 +230,12 @@ test("book language tags render as language names", async ({ page }) =>
 test("all locales have prefixed catalog and book routes", async ({ page }) =>
 {
     await page.goto("/");
-    await expect(page).toHaveURL(/\/en\/\?status=cancelled$/);
+    await expect(page).toHaveURL(/\/en\/$/);
     for (const [locale, language, title, pageStatus, original, gap] of [
         [
             "en",
             "en",
-            "Stories left on the shelf",
+            "Translated Book Publication Tracker",
             "Page 1 of 1",
             "Original edition",
             "Behind by 3 volumes",
@@ -207,7 +243,7 @@ test("all locales have prefixed catalog and book routes", async ({ page }) =>
         [
             "zh-hant",
             "zh-Hant",
-            "那些還沒說完的故事",
+            "代理書籍出版進度追蹤資料庫",
             "第 1 頁，共 1 頁",
             "原作版本",
             "落後 3 集",
@@ -215,7 +251,7 @@ test("all locales have prefixed catalog and book routes", async ({ page }) =>
         [
             "zh-hans",
             "zh-Hans",
-            "那些还没说完的故事",
+            "代理书籍出版进度追踪数据库",
             "第 1 页，共 1 页",
             "原作版本",
             "落后 3 集",
@@ -226,9 +262,31 @@ test("all locales have prefixed catalog and book routes", async ({ page }) =>
         await expect(page.locator("html")).toHaveAttribute("lang", language);
         await expect(page.locator("main h1")).toHaveText(title);
         await expect(page.locator("#page-status")).toHaveText(pageStatus);
+        if (locale === "zh-hant")
+            await expect(
+                page.locator(".book-tags").getByText("推測", { exact: true }),
+            ).toHaveCount(0);
         await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
             "href",
             `https://axedbooks.rip/${locale}/`,
+        );
+        await expect(
+            page.locator('meta[property="og:locale"]'),
+        ).toHaveAttribute(
+            "content",
+            locale === "zh-hant"
+                ? "zh_TW"
+                : locale === "zh-hans"
+                  ? "zh_CN"
+                  : "en_US",
+        );
+        await expect(page.locator('meta[property="og:url"]')).toHaveAttribute(
+            "content",
+            `https://axedbooks.rip/${locale}/`,
+        );
+        await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+            "content",
+            "summary",
         );
         const bookCard = page.locator(`[data-id="${bookPath}"]`);
         await expect(bookCard).toContainText(
@@ -271,9 +329,13 @@ test("catalog remains visible without JavaScript", async ({ browser }) =>
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
     await page.goto("/en/");
-    await expect(page.locator(".book-card:visible")).toHaveCount(4);
+    await expect(page.locator(".book-card:visible")).toHaveCount(1);
+    await expect(page.locator('.book-card[data-status="axed"]')).toHaveCount(1);
+    await expect(page.locator('[data-filter="status"]')).toHaveCount(0);
     await expect(
-        page.getByText("Enable JavaScript to search and filter the catalog."),
+        page.getByText(
+            "JavaScript is required for search and filters; page links work without it.",
+        ),
     ).toBeVisible();
     await expect(page.locator(".toolbar")).toBeHidden();
     await page.locator("#language-menu summary").click();
@@ -281,6 +343,19 @@ test("catalog remains visible without JavaScript", async ({ browser }) =>
     await expect(page).toHaveURL(/\/zh-hant\/$/);
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
     await context.close();
+});
+
+test("static cards remain available when the catalog index fails", async ({
+    page,
+}) =>
+{
+    await page.route("**/catalog.json", (route) =>
+        route.fulfill({ status: 500, body: "" }),
+    );
+    await page.goto("/en/");
+    await expect(page.locator(".book-card:visible")).toHaveCount(1);
+    await expect(page.locator("#catalog-load-error")).toBeVisible();
+    await expect(page.locator(".toolbar")).toBeHidden();
 });
 
 test("switcher dropdowns support keyboard and dismissal", async ({ page }) =>
@@ -312,7 +387,7 @@ test("switcher dropdowns support keyboard and dismissal", async ({ page }) =>
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: "繁體中文" })).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/zh-hant\/\?status=cancelled$/);
+    await expect(page).toHaveURL(/\/zh-hant\/$/);
 });
 
 test("switcher dropdowns fit a narrow screen", async ({ page }) =>
@@ -392,6 +467,7 @@ test("theme choices persist and system mode follows changes", async ({
 test("daisyUI components use the selected theme", async ({ page }) =>
 {
     await page.emulateMedia({ colorScheme: "light" });
+    await mockCatalog(page, 13);
     await page.goto("/en/");
     await expect(page.locator("header .navbar")).toBeVisible();
     await expect(page.locator("header nav .menu")).toBeVisible();
@@ -402,9 +478,7 @@ test("daisyUI components use the selected theme", async ({ page }) =>
     await expect(page.locator('[data-filter="format"]')).toHaveClass(
         /\bselect\b/,
     );
-    await expect(page.locator('[data-filter="status"]')).toHaveClass(
-        /\bselect\b/,
-    );
+    await expect(page.locator('[data-filter="status"]')).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Grid view" })).toHaveClass(
         /\bbtn\b/,
     );
@@ -487,7 +561,8 @@ test("catalog covers retain portrait proportions in grid and list views", async 
     page,
 }) =>
 {
-    await page.goto("/en/?status=all");
+    await mockCatalog(page, 4);
+    await page.goto("/en/");
     for (const view of ["Grid view", "List view"])
     {
         await page.getByRole("button", { name: view }).click();
@@ -510,9 +585,10 @@ for (const [width, columns] of [
     test(`catalog uses ${columns} columns at ${width}px`, async ({ page }) =>
     {
         await page.setViewportSize({ width, height: 900 });
-        await page.goto("/en/?status=all");
+        await mockCatalog(page, 8);
+        await page.goto("/en/");
         const cards = page.locator(".book-card:visible");
-        await expect(cards).toHaveCount(4);
+        await expect(cards).toHaveCount(8);
         const firstRowCount = () =>
             cards.evaluateAll((elements) =>
             {
@@ -536,7 +612,8 @@ for (const viewport of [
     test(`layout fits ${viewport.width}px viewport`, async ({ page }) =>
     {
         await page.setViewportSize(viewport);
-        await page.goto("/en/?status=all");
+        await mockCatalog(page, 4);
+        await page.goto("/en/");
         await expect(page.locator("main h1")).toBeVisible();
         await expect(page.locator(".book-card:visible")).toHaveCount(4);
         expect(

@@ -14,15 +14,7 @@ import {
     X,
 } from "@lucide/astro";
 import Layout from "../layouts/Layout.astro";
-import {
-    bookRouteParams,
-    bookStatus,
-    catalogBooks,
-    latestVolume,
-    sourceBookId,
-    validateBooks,
-    volumeGap,
-} from "../lib/catalog";
+import { CATALOG_PAGE_SIZE, catalogIndexBooks } from "../lib/catalog";
 import {
     formatDate,
     formatCountry,
@@ -30,19 +22,22 @@ import {
     formatLabel,
     formatLanguage,
     gapLabel,
+    htmlLang,
     localePath,
     type Locale,
 } from "../lib/i18n";
-import type { BookStatus } from "../lib/catalog";
 interface Props {
     locale: Locale;
+    page?: number;
 }
-const { locale } = Astro.props;
+const { locale, page = 1 } = Astro.props;
 const i18n = useI18n(
     { locals: { ...Astro.locals }, url: Astro.url },
     { locale },
 );
 const { t: translate, plural } = i18n;
+const behindLabels = i18n.raw<{ one?: string; other: string }>("behind");
+const aheadLabels = i18n.raw<{ one?: string; other: string }>("ahead");
 const [allBooks, publishers] = await Promise.all([
     getCollection("books"),
     getCollection("publishers"),
@@ -50,75 +45,39 @@ const [allBooks, publishers] = await Promise.all([
 const publisherById = new Map(
     publishers.map((publisher) => [publisher.id, publisher.data.name]),
 );
-const publisherOriginById = new Map(
-    publishers.map((publisher) => [publisher.id, publisher.data.origin]),
+const books = catalogIndexBooks(allBooks, publishers);
+const pageCount = Math.max(1, Math.ceil(books.length / CATALOG_PAGE_SIZE));
+const currentPage = Math.min(Math.max(page, 1), pageCount);
+const pageBooks = books.slice(
+    (currentPage - 1) * CATALOG_PAGE_SIZE,
+    currentPage * CATALOG_PAGE_SIZE,
 );
-const byId = validateBooks(allBooks, new Set(publisherById.keys()));
-const publisherName = (book: (typeof allBooks)[number]) =>
-    publisherById.get(bookRouteParams(book.id).publisher) ||
-    bookRouteParams(book.id).publisher;
-const statusLabels = {
-    releasing: "statusReleasing",
-    hiatus: "statusHiatus",
-    cancelled: "statusCancelled",
-    finished: "statusFinished",
-} as const;
-const statusColors: Record<BookStatus, string> = {
-    releasing: "badge-success",
-    hiatus: "badge-warning",
-    cancelled: "badge-error",
-    finished: "badge-neutral",
-};
-const books = catalogBooks(allBooks).sort(
-    (a, b) =>
-        b.data.lastPublishedDate.valueOf() -
-            a.data.lastPublishedDate.valueOf() || a.id.localeCompare(b.id),
-);
-const values = (
-    key: "publisher" | "format" | "origin" | "language" | "status",
-) => {
+const values = (key: "publisher" | "format" | "origin" | "language") => {
     if (key === "publisher")
-        return [
-            ...new Set(books.map((book) => bookRouteParams(book.id).publisher)),
-        ].sort((a, b) =>
-            (publisherById.get(a) || a).localeCompare(
-                publisherById.get(b) || b,
-            ),
+        return [...new Set(books.map((book) => book.publisherId))].sort(
+            (a, b) =>
+                (publisherById.get(a) || a).localeCompare(
+                    publisherById.get(b) || b,
+                ),
         );
     if (key === "format")
-        return [
-            ...new Set(books.map((book) => bookRouteParams(book.id).type)),
-        ].sort();
-    if (key === "status") return Object.keys(statusLabels) as BookStatus[];
+        return [...new Set(books.map((book) => book.format))].sort();
     if (key === "origin")
-        return [
-            ...new Set(
-                books.map(
-                    (book) =>
-                        publisherOriginById.get(
-                            bookRouteParams(book.id).publisher,
-                        ) || "unknown",
-                ),
-            ),
-        ].sort();
-    return [
-        ...new Set(books.map((book) => book.data[key] || "unknown")),
-    ].sort();
+        return [...new Set(books.map((book) => book.origin))].sort();
+    return [...new Set(books.map((book) => book.language))].sort();
 };
 const coverStyles = [
     "bg-secondary text-secondary-content",
     "bg-primary text-primary-content",
     "bg-neutral text-neutral-content",
 ];
+const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
 ---
 
-<Layout locale={locale}>
+<Layout locale={locale} path={pagePath(currentPage)}>
     <section class="border-b border-base-300 bg-base-200">
         <div class="mx-auto max-w-[1312px] px-4 py-10 sm:px-6 lg:px-9 lg:py-12">
-            <p class="text-xs font-semibold text-primary">
-                {translate("eyebrow")}
-            </p>
-            <h1 class="mt-3 font-serif text-3xl font-bold text-base-content sm:text-4xl">
+            <h1 class="font-serif text-3xl font-bold text-base-content sm:text-4xl">
                 {translate("title")}
             </h1>
             <p class="mt-3 max-w-2xl text-sm leading-6 text-base-content/70">
@@ -138,7 +97,7 @@ const coverStyles = [
                 {translate("catalogDesc")}
             </p>
         </div>
-        {books.some((book) => book.data.fictional) && (
+        {books.some((book) => book.fictional) && (
             <div
                 role="alert"
                 class="alert alert-warning alert-soft notice text-sm"
@@ -153,7 +112,36 @@ const coverStyles = [
         <p id="no-js" class="mt-4 text-sm text-base-content/70">
             {translate("noJs")}
         </p>
-        <div id="catalog-app" data-locale={locale}>
+        <p
+            id="catalog-load-error"
+            class="mt-4 text-sm text-error"
+            role="alert"
+            hidden
+        >
+            {translate("catalogLoadError")}
+        </p>
+        <div
+            id="catalog-app"
+            data-locale={htmlLang(locale)}
+            data-locale-route={locale}
+            data-page={currentPage}
+            data-page-root={localePath(locale)}
+            data-catalog-url="/catalog.json"
+            data-page-status={i18n.raw<string>("pageStatus")}
+            data-axed-label={translate("statusAxed")}
+            data-details-label={translate("details")}
+            data-fiction-label={translate("fiction")}
+            data-format-manga={translate("manga")}
+            data-format-light-novel={translate("lightNovel")}
+            data-unknown-label={translate("unknown")}
+            data-manga-label={translate("manga")}
+            data-light-novel-label={translate("lightNovel")}
+            data-numbered-volume={i18n.raw<string>("numberedVolume")}
+            data-behind-labels={JSON.stringify(behindLabels)}
+            data-ahead-labels={JSON.stringify(aheadLabels)}
+            data-caught-up-label={translate("caughtUp")}
+            data-unavailable-label={translate("unavailable")}
+        >
             <div class="toolbar my-6 flex flex-col gap-3 lg:flex-row" hidden>
                 <label class="input search-box w-full min-w-0 lg:flex-1">
                     <Search size={18} aria-hidden="true" />
@@ -177,7 +165,7 @@ const coverStyles = [
                             <option value="date-desc">
                                 {translate("newest")}
                             </option>
-                            <option value="date-asc">
+                            <option value="date-asc" selected>
                                 {translate("oldest")}
                             </option>
                             <option value="title-asc">
@@ -248,7 +236,6 @@ const coverStyles = [
                     {(
                         [
                             ["format", translate("format")],
-                            ["status", translate("statusFilter")],
                             ["origin", translate("origin")],
                             ["publisher", translate("publisher")],
                             ["language", translate("bookLanguage")],
@@ -267,35 +254,20 @@ const coverStyles = [
                                 <option value="">{translate("all")}</option>
                                 {values(key).map((value) => (
                                     <option value={value}>
-                                        {key === "status"
-                                            ? translate(
-                                                  statusLabels[
-                                                      value as BookStatus
-                                                  ],
-                                              )
-                                            : key === "publisher"
-                                              ? publisherById.get(value) ||
-                                                value
-                                              : key === "origin"
-                                                ? value === "unknown"
-                                                    ? translate("unknown")
-                                                    : formatCountry(
-                                                          value,
-                                                          locale,
-                                                      )
-                                                : key === "format"
-                                                  ? formatLabel(
+                                        {key === "publisher"
+                                            ? publisherById.get(value) || value
+                                            : key === "origin"
+                                              ? value === "unknown"
+                                                  ? translate("unknown")
+                                                  : formatCountry(value, locale)
+                                              : key === "format"
+                                                ? formatLabel(value, translate)
+                                                : value === "unknown"
+                                                  ? translate("unknown")
+                                                  : formatLanguage(
                                                         value,
-                                                        translate,
-                                                    )
-                                                  : value === "unknown"
-                                                    ? translate("unknown")
-                                                    : key === "language"
-                                                      ? formatLanguage(
-                                                            value,
-                                                            locale,
-                                                        )
-                                                      : value}
+                                                        locale,
+                                                    )}
                                     </option>
                                 ))}
                             </select>
@@ -313,7 +285,7 @@ const coverStyles = [
                         <span class="hidden text-xs sm:inline">
                             <span id="result-range">
                                 {books.length
-                                    ? `01—${String(books.length).padStart(2, "0")}`
+                                    ? `${String((currentPage - 1) * CATALOG_PAGE_SIZE + 1).padStart(2, "0")}—${String(Math.min(currentPage * CATALOG_PAGE_SIZE, books.length)).padStart(2, "0")}`
                                     : "00—00"}
                             </span>
                         </span>
@@ -322,45 +294,34 @@ const coverStyles = [
                         id="book-list"
                         class="book-grid grid grid-cols-2 gap-x-3 gap-y-8 pt-6 sm:gap-x-5 min-[901px]:grid-cols-3 min-[1201px]:grid-cols-4"
                     >
-                        {books.map((book, index) => {
-                            const sourceId = sourceBookId(book);
-                            const source = sourceId
-                                ? byId.get(sourceId)
-                                : undefined;
-                            const gap = volumeGap(book, source);
-                            const status = bookStatus(book, source);
-                            const volume = latestVolume(book);
+                        {pageBooks.map((book, index) => {
+                            const gap = book.gap;
+                            const volume = book.volume;
                             const displayVolume =
                                 typeof volume === "number"
                                     ? translate("numberedVolume", { volume })
                                     : volume;
-                            const format = bookRouteParams(book.id).type;
-                            const publisher = publisherName(book);
-                            const origin =
-                                publisherOriginById.get(
-                                    bookRouteParams(book.id).publisher,
-                                ) || "unknown";
+                            const format = book.format;
                             return (
                                 <article
                                     class="card card-sm book-card min-w-0"
                                     data-id={book.id}
-                                    data-title={book.data.title}
+                                    data-title={book.title}
                                     data-search={[
-                                        book.data.title,
-                                        publisher,
-                                        ...book.data.authors,
-                                        source?.data.title || "",
+                                        book.title,
+                                        book.publisherName,
+                                        ...book.authors,
+                                        book.sourceTitle || "",
                                     ].join(" ")}
-                                    data-publisher={
-                                        bookRouteParams(book.id).publisher
-                                    }
+                                    data-publisher={book.publisherId}
                                     data-format={format}
-                                    data-origin={origin}
-                                    data-status={status}
-                                    data-language={book.data.language}
-                                    data-date={book.data.lastPublishedDate
-                                        .toISOString()
-                                        .slice(0, 10)}
+                                    data-origin={book.origin}
+                                    data-status={book.status}
+                                    data-language={book.language}
+                                    data-date={book.lastPublishedDate.slice(
+                                        0,
+                                        10,
+                                    )}
                                     data-volume={volume}
                                     data-gap={gap ?? ""}
                                 >
@@ -372,12 +333,12 @@ const coverStyles = [
                                             ],
                                         ]}
                                         href={localePath(locale, `${book.id}/`)}
-                                        aria-label={`${translate("details")}: ${book.data.title}`}
+                                        aria-label={`${translate("details")}: ${book.title}`}
                                     >
-                                        {book.data.cover ? (
+                                        {book.cover ? (
                                             <img
                                                 class="absolute inset-0 h-full w-full bg-base-300 object-contain"
-                                                src={book.data.cover}
+                                                src={book.cover}
                                                 alt=""
                                                 loading="lazy"
                                             />
@@ -391,7 +352,7 @@ const coverStyles = [
                                                     )}
                                                 </span>
                                                 <span class="line-clamp-4 break-words font-serif text-sm font-bold sm:text-lg">
-                                                    {book.data.title}
+                                                    {book.title}
                                                 </span>
                                                 <span class="flex justify-between gap-2 text-[10px]">
                                                     <span>
@@ -407,28 +368,21 @@ const coverStyles = [
                                     </a>
                                     <div class="card-body book-info mt-3 min-w-0 gap-2 p-0">
                                         <div class="book-tags flex flex-wrap gap-1">
-                                            <span
-                                                class:list={[
-                                                    "badge badge-soft badge-sm status-badge",
-                                                    statusColors[status],
-                                                ]}
-                                            >
-                                                {translate(
-                                                    statusLabels[status],
-                                                )}
+                                            <span class="badge badge-soft badge-error badge-sm status-badge">
+                                                {translate("statusAxed")}
                                             </span>
                                             <span class="badge badge-soft badge-secondary badge-sm">
                                                 {formatLabel(format, translate)}
                                             </span>
                                             <span class="badge badge-soft badge-primary badge-sm">
-                                                {origin === "unknown"
+                                                {book.origin === "unknown"
                                                     ? translate("unknown")
                                                     : formatCountry(
-                                                          origin,
+                                                          book.origin,
                                                           locale,
                                                       )}
                                             </span>
-                                            {book.data.fictional && (
+                                            {book.fictional && (
                                                 <span class="badge badge-soft badge-warning badge-sm">
                                                     {translate("fiction")}
                                                 </span>
@@ -442,20 +396,22 @@ const coverStyles = [
                                                     `${book.id}/`,
                                                 )}
                                             >
-                                                {book.data.title}
+                                                {book.title}
                                             </a>
                                         </h3>
                                         <p class="text-xs text-base-content/70">
                                             {formatAuthors(
-                                                book.data.authors,
+                                                book.authors,
                                                 locale,
                                             )}
                                         </p>
                                         <div class="flex flex-wrap justify-between gap-1 text-xs text-base-content/70">
-                                            <span>{publisher}</span>
+                                            <span>{book.publisherName}</span>
                                             <span>
                                                 {formatDate(
-                                                    book.data.lastPublishedDate,
+                                                    new Date(
+                                                        book.lastPublishedDate,
+                                                    ),
                                                     locale,
                                                 )}
                                             </span>
@@ -484,7 +440,7 @@ const coverStyles = [
                                                     locale,
                                                     `${book.id}/`,
                                                 )}
-                                                aria-label={`${translate("details")}: ${book.data.title}`}
+                                                aria-label={`${translate("details")}: ${book.title}`}
                                             >
                                                 <ArrowRight size={16} />
                                             </a>
@@ -494,6 +450,98 @@ const coverStyles = [
                             );
                         })}
                     </div>
+                    <template id="book-card-template">
+                        <article class="card card-sm book-card min-w-0">
+                            <a
+                                class="book-cover relative flex aspect-[2/3] w-full flex-col justify-between self-start overflow-hidden rounded-box p-3 sm:p-4"
+                                data-card-cover-link
+                                aria-label=""
+                            >
+                                <img
+                                    class="absolute inset-0 hidden h-full w-full bg-base-300 object-contain"
+                                    data-card-image
+                                    alt=""
+                                    loading="lazy"
+                                />
+                                <div
+                                    class="flex h-full flex-col justify-between"
+                                    data-card-placeholder
+                                >
+                                    <span
+                                        class="text-[10px] font-semibold"
+                                        data-card-index
+                                    ></span>
+                                    <span
+                                        class="line-clamp-4 break-words font-serif text-sm font-bold sm:text-lg"
+                                        data-card-cover-title
+                                    ></span>
+                                    <span class="flex justify-between gap-2 text-[10px]">
+                                        <span data-card-cover-format></span>
+                                        <span data-card-cover-volume></span>
+                                    </span>
+                                </div>
+                            </a>
+                            <div class="card-body book-info mt-3 min-w-0 gap-2 p-0">
+                                <div class="book-tags flex flex-wrap gap-1">
+                                    <span
+                                        class="badge badge-soft badge-error badge-sm status-badge"
+                                        data-card-status
+                                    ></span>
+                                    <span
+                                        class="badge badge-soft badge-secondary badge-sm"
+                                        data-card-format
+                                    ></span>
+                                    <span
+                                        class="badge badge-soft badge-primary badge-sm"
+                                        data-card-origin
+                                    ></span>
+                                    <span
+                                        class="badge badge-soft badge-warning badge-sm"
+                                        data-card-fiction
+                                        hidden
+                                    ></span>
+                                </div>
+                                <h3 class="card-title break-words font-serif text-base">
+                                    <a
+                                        class="link link-hover"
+                                        data-card-title-link
+                                    >
+                                        <span data-card-title></span>
+                                    </a>
+                                </h3>
+                                <p
+                                    class="text-xs text-base-content/70"
+                                    data-card-authors
+                                ></p>
+                                <div class="flex flex-wrap justify-between gap-1 text-xs text-base-content/70">
+                                    <span data-card-publisher></span>
+                                    <span data-card-date></span>
+                                </div>
+                                <div class="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-t border-base-300 text-xs sm:flex">
+                                    <div class="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                                        <span>
+                                            <strong
+                                                class="text-base-content"
+                                                data-card-volume
+                                            ></strong>
+                                        </span>
+                                        <span
+                                            class="text-primary"
+                                            data-card-gap
+                                            hidden
+                                        ></span>
+                                    </div>
+                                    <a
+                                        class="btn btn-ghost btn-square btn-xs sm:ml-auto"
+                                        data-card-details-link
+                                        aria-label=""
+                                    >
+                                        <ArrowRight size={16} />
+                                    </a>
+                                </div>
+                            </div>
+                        </article>
+                    </template>
                     <div
                         id="no-results"
                         class="py-16 text-center"
@@ -527,9 +575,12 @@ const coverStyles = [
                         class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-5 text-sm"
                         aria-label={translate("pagination")}
                         data-page-status={i18n.raw<string>("pageStatus")}
-                        hidden
+                        hidden={pageCount <= 1}
                     >
-                        <label class="flex items-center gap-2">
+                        <label
+                            class="page-size-control flex items-center gap-2"
+                            hidden
+                        >
                             {translate("perPage")}
                             <select
                                 id="page-size"
@@ -541,29 +592,60 @@ const coverStyles = [
                             </select>
                         </label>
                         <div class="join">
-                            <button
+                            <a
                                 id="previous-page"
+                                data-page-link
+                                data-page={Math.max(1, currentPage - 1)}
                                 class="btn btn-square btn-sm join-item"
-                                type="button"
+                                class:list={{
+                                    "btn-disabled": currentPage <= 1,
+                                }}
+                                href={localePath(
+                                    locale,
+                                    pagePath(Math.max(1, currentPage - 1)),
+                                )}
                                 aria-label={translate("previousPage")}
                                 title={translate("previousPage")}
+                                aria-disabled={
+                                    currentPage <= 1 ? "true" : undefined
+                                }
                             >
                                 <ChevronLeft size={18} />
-                            </button>
+                            </a>
                             <span
                                 id="page-status"
                                 class="join-item flex min-w-24 items-center justify-center bg-base-200 px-3 text-xs"
                                 aria-live="polite"
-                            ></span>
-                            <button
+                            >
+                                {translate("pageStatus", {
+                                    page: currentPage,
+                                    total: pageCount,
+                                })}
+                            </span>
+                            <a
                                 id="next-page"
+                                data-page-link
+                                data-page={Math.min(pageCount, currentPage + 1)}
                                 class="btn btn-square btn-sm join-item"
-                                type="button"
+                                class:list={{
+                                    "btn-disabled": currentPage >= pageCount,
+                                }}
+                                href={localePath(
+                                    locale,
+                                    pagePath(
+                                        Math.min(pageCount, currentPage + 1),
+                                    ),
+                                )}
                                 aria-label={translate("nextPage")}
                                 title={translate("nextPage")}
+                                aria-disabled={
+                                    currentPage >= pageCount
+                                        ? "true"
+                                        : undefined
+                                }
                             >
                                 <ChevronRight size={18} />
-                            </button>
+                            </a>
                         </div>
                     </nav>
                 </div>

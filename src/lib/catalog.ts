@@ -1,4 +1,4 @@
-export type BookStatus = "releasing" | "hiatus" | "cancelled" | "finished";
+export type BookStatus = "ongoing" | "hiatus" | "axed" | "finished";
 
 export interface BookData
 {
@@ -19,6 +19,34 @@ export interface Book
 {
     id: string;
     data: BookData;
+}
+
+export const CATALOG_PAGE_SIZE = 12;
+
+export interface CatalogIndexBook
+{
+    id: string;
+    title: string;
+    authors: string[];
+    publisherId: string;
+    publisherName: string;
+    format: string;
+    origin: string;
+    language: string;
+    lastPublishedDate: string;
+    volume: number | string;
+    gap?: number;
+    status: "axed";
+    statusEstimated: boolean;
+    sourceTitle?: string;
+    cover?: string;
+    fictional: boolean;
+}
+
+interface CatalogPublisher
+{
+    id: string;
+    data: { name: string; origin: string };
 }
 
 export function bookRouteParams(id: string)
@@ -95,6 +123,63 @@ export function catalogBooks<Entry extends Book>(books: Entry[]): Entry[]
     return books.filter((book) => !sourceIds.has(book.id));
 }
 
+export function catalogIndexBooks<Entry extends Book>(
+    books: Entry[],
+    publishers: CatalogPublisher[],
+    now = new Date(),
+): CatalogIndexBook[]
+{
+    const publisherById = new Map(
+        publishers.map((publisher) => [publisher.id, publisher]),
+    );
+    const byId = validateBooks(books, new Set(publisherById.keys()));
+    const indexed: CatalogIndexBook[] = [];
+    for (const book of catalogBooks(books))
+    {
+        const sourceId = sourceBookId(book);
+        const source = sourceId ? byId.get(sourceId) : undefined;
+        if (bookStatus(book, source, now) !== "axed") continue;
+
+        const { publisher, type } = bookRouteParams(book.id);
+        const publisherData = publisherById.get(publisher);
+        indexed.push({
+            id: book.id,
+            title: book.data.title,
+            authors: book.data.authors,
+            publisherId: publisher,
+            publisherName: publisherData?.data.name || publisher,
+            format: type,
+            origin: publisherData?.data.origin || "unknown",
+            language: book.data.language,
+            lastPublishedDate: book.data.lastPublishedDate.toISOString(),
+            volume: latestVolume(book),
+            gap: volumeGap(book, source),
+            status: "axed",
+            statusEstimated: book.data.status === undefined,
+            sourceTitle: source?.data.title,
+            cover: book.data.cover,
+            fictional: book.data.fictional,
+        });
+    }
+    return indexed.sort(
+        (a, b) =>
+            a.lastPublishedDate.localeCompare(b.lastPublishedDate) ||
+            a.id.localeCompare(b.id),
+    );
+}
+
+export function catalogPageNumbers(
+    itemCount: number,
+    pageSize = CATALOG_PAGE_SIZE,
+): number[]
+{
+    const pageCount = Math.ceil(itemCount / pageSize);
+    return Array.from(
+        { length: Math.max(0, pageCount - 1) },
+        (_, index) => index + 2,
+    );
+}
+
 export function bookRouteEntries<Entry extends Book>(
     books: Entry[],
     publisherIds?: Set<string>,
@@ -165,14 +250,14 @@ export function bookStatus(
 ): BookStatus
 {
     if (book.data.status) return book.data.status;
-    if (!book.data.sourcePublisher) return "releasing";
+    if (!book.data.sourcePublisher) return "ongoing";
 
     const gap = volumeGap(book, source);
-    if (gap === undefined || !source) return "releasing";
-    const sourceStatus = source.data.status ?? "releasing";
+    if (gap === undefined || !source) return "ongoing";
+    const sourceStatus = source.data.status ?? "ongoing";
     if (gap <= 0)
     {
-        return sourceStatus === "finished" || sourceStatus === "cancelled"
+        return sourceStatus === "finished" || sourceStatus === "axed"
             ? "finished"
             : sourceStatus;
     }
@@ -181,24 +266,22 @@ export function bookStatus(
         olderThanMonths(book.data.lastPublishedDate, months, now);
     switch (sourceStatus)
     {
-        case "cancelled":
-            return translationOlderThan(12) ? "cancelled" : "releasing";
+        case "axed":
+            return translationOlderThan(12) ? "axed" : "ongoing";
         case "finished":
             if (
                 (olderThanMonths(source.data.lastPublishedDate, 12, now) &&
                     translationOlderThan(18)) ||
                 (gap === 1 && translationOlderThan(24))
             )
-                return "cancelled";
-            return translationOlderThan(18) ? "hiatus" : "releasing";
+                return "axed";
+            return translationOlderThan(18) ? "hiatus" : "ongoing";
         case "hiatus":
-            if (translationOlderThan(24)) return "cancelled";
-            return translationOlderThan(18) ? "hiatus" : "releasing";
-        case "releasing":
-            if (gap >= 2 && translationOlderThan(24)) return "cancelled";
-            return gap >= 2 && translationOlderThan(12)
-                ? "hiatus"
-                : "releasing";
+            if (translationOlderThan(24)) return "axed";
+            return translationOlderThan(18) ? "hiatus" : "ongoing";
+        case "ongoing":
+            if (gap >= 2 && translationOlderThan(24)) return "axed";
+            return gap >= 2 && translationOlderThan(12) ? "hiatus" : "ongoing";
     }
 }
 

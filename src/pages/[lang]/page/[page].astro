@@ -1,0 +1,27 @@
+---
+import { getCollection } from "astro:content";
+import { catalogIndexBooks, catalogPageNumbers } from "../../../lib/catalog";
+import { locales, type Locale } from "../../../lib/i18n";
+import Catalog from "../../../components/Catalog.astro";
+
+export async function getStaticPaths() {
+    const [books, publishers] = await Promise.all([
+        getCollection("books"),
+        getCollection("publishers"),
+    ]);
+    const pageNumbers = catalogPageNumbers(
+        catalogIndexBooks(books, publishers).length,
+    );
+    return locales.flatMap((locale: Locale) =>
+        pageNumbers.map((page: number) => ({
+            params: { lang: locale, page: String(page) },
+            props: { page },
+        })),
+    );
+}
+
+const locale = Astro.params.lang as Locale;
+const { page } = Astro.props;
+---
+
+<Catalog locale={locale} page={page} />

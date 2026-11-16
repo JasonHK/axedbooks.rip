@@ -49,9 +49,9 @@ const displayVolume = (value: number | string) =>
 const format = bookRouteParams(book.id).type;
 const status = bookStatus(book, source);
 const statusLabels = {
-    releasing: "statusReleasing",
+    ongoing: "statusOngoing",
     hiatus: "statusHiatus",
-    cancelled: "statusCancelled",
+    axed: "statusAxed",
     finished: "statusFinished",
 } as const;
 ---
@@ -132,6 +132,13 @@ const statusLabels = {
                         </dt>
                         <dd class="mt-1 font-semibold">
                             {displayVolume(volume)}
+                            {gap !== undefined && gap !== 0 && (
+                                <>
+                                    {locale === "en" ? " (" : "（"}
+                                    {gapLabel(gap, translate, plural)}
+                                    {locale === "en" ? ")" : "）"}
+                                </>
+                            )}
                         </dd>
                     </div>
                     <div>
@@ -177,6 +184,18 @@ const statusLabels = {
                                     {displayVolume(latestVolume(source))}
                                 </dd>
                             </div>
+                            <div>
+                                <dt class="text-base-content/70">
+                                    {translate(
+                                        source.data.status
+                                            ? "bookStatus"
+                                            : "estimatedStatus",
+                                    )}
+                                </dt>
+                                <dd class="mt-1 font-semibold">
+                                    {translate(statusLabels[bookStatus(source)])}
+                                </dd>
+                            </div>
                             {sourcePublisherOrigin && (
                                 <div>
                                     <dt class="text-base-content/70">
@@ -190,14 +209,6 @@ const statusLabels = {
                                     </dd>
                                 </div>
                             )}
-                            <div>
-                                <dt class="text-base-content/70">
-                                    {translate("edition")}
-                                </dt>
-                                <dd class="mt-1 font-semibold">
-                                    {gapLabel(gap, translate, plural)}
-                                </dd>
-                            </div>
                         </dl>
                     </section>
                 )}
