@@ -4,6 +4,8 @@ import { getRelativeLocaleUrl } from "astro:i18n";
 import BookDetail from "../../../../components/BookDetail.astro";
 import { bookRouteEntries, bookRouteParams } from "../../../../lib/catalog";
 
+export const prerender = true;
+
 export async function getStaticPaths() {
     const [books, publishers] = await Promise.all([
         getCollection("books"),

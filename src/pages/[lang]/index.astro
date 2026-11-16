@@ -1,10 +1,9 @@
 ---
 import Catalog from "../../components/Catalog.astro";
 import { locales, type Locale } from "../../lib/i18n";
-export function getStaticPaths() {
-    return locales.map((lang) => ({ params: { lang } }));
-}
+export const prerender = false;
 const locale = Astro.params.lang as Locale;
+if (!locales.includes(locale)) return new Response(null, { status: 404 });
 ---
 
 <Catalog locale={locale} />

@@ -34,6 +34,12 @@ import {
     type Locale,
 } from "../lib/i18n";
 import type { BookStatus } from "../lib/catalog";
+import {
+    catalogPageSizes,
+    catalogUrl,
+    filterCatalog,
+    parseCatalogState,
+} from "../lib/catalog-query";
 interface Props {
     locale: Locale;
 }
@@ -69,11 +75,7 @@ const statusColors: Record<BookStatus, string> = {
     cancelled: "badge-error",
     finished: "badge-neutral",
 };
-const books = catalogBooks(allBooks).sort(
-    (a, b) =>
-        b.data.lastPublishedDate.valueOf() -
-            a.data.lastPublishedDate.valueOf() || a.id.localeCompare(b.id),
-);
+const books = catalogBooks(allBooks);
 const values = (
     key: "publisher" | "format" | "origin" | "language" | "status",
 ) => {
@@ -110,6 +112,51 @@ const coverStyles = [
     "bg-primary text-primary-content",
     "bg-neutral text-neutral-content",
 ];
+const catalogRows = books.map((book) => {
+    const sourceId = sourceBookId(book);
+    const source = sourceId ? byId.get(sourceId) : undefined;
+    const gap = volumeGap(book, source);
+    const status = bookStatus(book, source);
+    const volume = latestVolume(book);
+    const format = bookRouteParams(book.id).type;
+    const publisher = publisherName(book);
+    const origin =
+        publisherOriginById.get(bookRouteParams(book.id).publisher) ||
+        "unknown";
+    return {
+        id: book.id,
+        title: book.data.title,
+        search: [
+            book.data.title,
+            publisher,
+            ...book.data.authors,
+            source?.data.title || "",
+        ].join(" "),
+        publisher: bookRouteParams(book.id).publisher,
+        format,
+        origin,
+        status,
+        language: book.data.language || "unknown",
+        date: book.data.lastPublishedDate.toISOString().slice(0, 10),
+        volume: String(volume),
+        gap: gap === undefined ? "" : String(gap),
+        book,
+        source,
+        gapValue: gap,
+        volumeValue: volume,
+        publisherName: publisher,
+        displayOrigin: origin,
+    };
+});
+const queryState = parseCatalogState(Astro.url.searchParams, {
+    format: values("format"),
+    status: values("status"),
+    origin: values("origin"),
+    publisher: values("publisher"),
+    language: values("language"),
+});
+const result = filterCatalog(catalogRows, queryState, locale);
+const pageBooks = result.rows;
 ---
 
 <Layout locale={locale}>
@@ -153,422 +200,557 @@ const coverStyles = [
         <p id="no-js" class="mt-4 text-sm text-base-content/70">
             {translate("noJs")}
         </p>
-        <div id="catalog-app" data-locale={locale}>
-            <div class="toolbar my-6 flex flex-col gap-3 lg:flex-row" hidden>
-                <label class="input search-box w-full min-w-0 lg:flex-1">
-                    <Search size={18} aria-hidden="true" />
-                    <span class="sr-only">{translate("searchLabel")}</span>
-                    <input
-                        id="search"
-                        class="min-w-0 text-xs sm:text-sm"
-                        type="search"
-                        placeholder={translate("search")}
-                        autocomplete="off"
-                    />
-                </label>
-                <div class="flex flex-wrap items-center gap-2 sm:flex-nowrap">
-                    <label class="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-                        <ArrowDownUp size={16} aria-hidden="true" />
-                        <span class="sr-only">{translate("sort")}</span>
-                        <select
-                            id="sort"
-                            class="select select-sm w-full sm:w-auto"
-                        >
-                            <option value="date-desc">
-                                {translate("newest")}
-                            </option>
-                            <option value="date-asc">
-                                {translate("oldest")}
-                            </option>
-                            <option value="title-asc">
-                                {translate("titleAsc")}
-                            </option>
-                            <option value="title-desc">
-                                {translate("titleDesc")}
-                            </option>
-                            <option value="volume-desc">
-                                {translate("volumeDesc")}
-                            </option>
-                            <option value="volume-asc">
-                                {translate("volumeAsc")}
-                            </option>
-                            <option value="gap-desc">
-                                {translate("gapDesc")}
-                            </option>
-                            <option value="gap-asc">
-                                {translate("gapAsc")}
-                            </option>
-                        </select>
-                    </label>
-                    <div
-                        class="join ml-auto"
-                        role="group"
-                        aria-label={translate("display")}
-                    >
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-square join-item view-button btn-active"
-                            data-view="grid"
-                            aria-label={translate("grid")}
-                            title={translate("grid")}
-                            aria-pressed="true"
-                        >
-                            <LayoutGrid size={17} />
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-square join-item view-button"
-                            data-view="list"
-                            aria-label={translate("list")}
-                            title={translate("list")}
-                            aria-pressed="false"
-                        >
-                            <List size={18} />
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="flex flex-col gap-6 min-[901px]:flex-row">
-                <aside
-                    class="filter-panel grid grid-cols-2 gap-x-3 min-[901px]:block min-[901px]:w-48 min-[901px]:shrink-0"
-                    hidden
-                >
-                    <div class="col-span-2 flex items-center justify-between border-b border-base-300 py-3">
-                        <span class="flex items-center gap-2 text-sm font-semibold">
-                            <SlidersHorizontal size={16} />{" "}
-                            {translate("filters")}
-                        </span>
-                        <button
-                            type="button"
-                            class="btn btn-ghost btn-xs reset-button"
-                        >
-                            {translate("clear")}
-                        </button>
-                    </div>
-                    {(
-                        [
-                            ["format", translate("format")],
-                            ["status", translate("statusFilter")],
-                            ["origin", translate("origin")],
-                            ["publisher", translate("publisher")],
-                            ["language", translate("bookLanguage")],
-                        ] as const
-                    ).map(([key, label]) => (
-                        <fieldset class="fieldset border-b border-base-300 py-3">
-                            <legend class="fieldset-legend">{label}</legend>
-                            <label class="sr-only" for={`filter-${key}`}>
-                                {label}
-                            </label>
-                            <select
-                                id={`filter-${key}`}
-                                class="select select-sm w-full"
-                                data-filter={key}
-                            >
-                                <option value="">{translate("all")}</option>
-                                {values(key).map((value) => (
-                                    <option value={value}>
-                                        {key === "status"
-                                            ? translate(
-                                                  statusLabels[
-                                                      value as BookStatus
-                                                  ],
-                                              )
-                                            : key === "publisher"
-                                              ? publisherById.get(value) ||
-                                                value
-                                              : key === "origin"
-                                                ? value === "unknown"
-                                                    ? translate("unknown")
-                                                    : formatCountry(
-                                                          value,
-                                                          locale,
-                                                      )
-                                                : key === "format"
-                                                  ? formatLabel(
-                                                        value,
-                                                        translate,
-                                                    )
-                                                  : value === "unknown"
-                                                    ? translate("unknown")
-                                                    : key === "language"
-                                                      ? formatLanguage(
-                                                            value,
-                                                            locale,
-                                                        )
-                                                      : value}
-                                    </option>
-                                ))}
-                            </select>
-                        </fieldset>
-                    ))}
-                </aside>
-                <div class="min-w-0 flex-1">
-                    <div class="flex min-h-12 items-center justify-between border-y border-base-300 text-sm text-base-content/70">
-                        <span>
-                            <strong id="result-count" class="text-base-content">
-                                {books.length}
-                            </strong>{" "}
-                            {translate("results")}
-                        </span>
-                        <span class="hidden text-xs sm:inline">
-                            <span id="result-range">
-                                {books.length
-                                    ? `01—${String(books.length).padStart(2, "0")}`
-                                    : "00—00"}
-                            </span>
-                        </span>
-                    </div>
-                    <div
-                        id="book-list"
-                        class="book-grid grid grid-cols-2 gap-x-3 gap-y-8 pt-6 sm:gap-x-5 min-[901px]:grid-cols-3 min-[1201px]:grid-cols-4"
-                    >
-                        {books.map((book, index) => {
-                            const sourceId = sourceBookId(book);
-                            const source = sourceId
-                                ? byId.get(sourceId)
-                                : undefined;
-                            const gap = volumeGap(book, source);
-                            const status = bookStatus(book, source);
-                            const volume = latestVolume(book);
-                            const displayVolume =
-                                typeof volume === "number"
-                                    ? translate("numberedVolume", { volume })
-                                    : volume;
-                            const format = bookRouteParams(book.id).type;
-                            const publisher = publisherName(book);
-                            const origin =
-                                publisherOriginById.get(
-                                    bookRouteParams(book.id).publisher,
-                                ) || "unknown";
-                            return (
-                                <article
-                                    class="card card-sm book-card min-w-0"
-                                    data-id={book.id}
-                                    data-title={book.data.title}
-                                    data-search={[
-                                        book.data.title,
-                                        publisher,
-                                        ...book.data.authors,
-                                        source?.data.title || "",
-                                    ].join(" ")}
-                                    data-publisher={
-                                        bookRouteParams(book.id).publisher
-                                    }
-                                    data-format={format}
-                                    data-origin={origin}
-                                    data-status={status}
-                                    data-language={book.data.language}
-                                    data-date={book.data.lastPublishedDate
-                                        .toISOString()
-                                        .slice(0, 10)}
-                                    data-volume={volume}
-                                    data-gap={gap ?? ""}
-                                >
-                                    <a
-                                        class:list={[
-                                            "book-cover relative flex aspect-[2/3] w-full flex-col justify-between self-start overflow-hidden rounded-box p-3 sm:p-4",
-                                            coverStyles[
-                                                index % coverStyles.length
-                                            ],
-                                        ]}
-                                        href={localePath(locale, `${book.id}/`)}
-                                        aria-label={`${translate("details")}: ${book.data.title}`}
-                                    >
-                                        {book.data.cover ? (
-                                            <img
-                                                class="absolute inset-0 h-full w-full bg-base-300 object-contain"
-                                                src={book.data.cover}
-                                                alt=""
-                                                loading="lazy"
-                                            />
-                                        ) : (
-                                            <>
-                                                <span class="text-[10px] font-semibold">
-                                                    AXED BOOKS /{" "}
-                                                    {String(index + 1).padStart(
-                                                        2,
-                                                        "0",
-                                                    )}
-                                                </span>
-                                                <span class="line-clamp-4 break-words font-serif text-sm font-bold sm:text-lg">
-                                                    {book.data.title}
-                                                </span>
-                                                <span class="flex justify-between gap-2 text-[10px]">
-                                                    <span>
-                                                        {formatLabel(
-                                                            format,
-                                                            translate,
-                                                        )}
-                                                    </span>
-                                                    <span>{displayVolume}</span>
-                                                </span>
-                                            </>
-                                        )}
-                                    </a>
-                                    <div class="card-body book-info mt-3 min-w-0 gap-2 p-0">
-                                        <div class="book-tags flex flex-wrap gap-1">
-                                            <span
-                                                class:list={[
-                                                    "badge badge-soft badge-sm status-badge",
-                                                    statusColors[status],
-                                                ]}
-                                            >
-                                                {translate(
-                                                    statusLabels[status],
-                                                )}
-                                            </span>
-                                            <span class="badge badge-soft badge-secondary badge-sm">
-                                                {formatLabel(format, translate)}
-                                            </span>
-                                            <span class="badge badge-soft badge-primary badge-sm">
-                                                {origin === "unknown"
-                                                    ? translate("unknown")
-                                                    : formatCountry(
-                                                          origin,
-                                                          locale,
-                                                      )}
-                                            </span>
-                                            {book.data.fictional && (
-                                                <span class="badge badge-soft badge-warning badge-sm">
-                                                    {translate("fiction")}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <h3 class="card-title break-words font-serif text-base">
-                                            <a
-                                                class="link link-hover"
-                                                href={localePath(
-                                                    locale,
-                                                    `${book.id}/`,
-                                                )}
-                                            >
-                                                {book.data.title}
-                                            </a>
-                                        </h3>
-                                        <p class="text-xs text-base-content/70">
-                                            {formatAuthors(
-                                                book.data.authors,
-                                                locale,
-                                            )}
-                                        </p>
-                                        <div class="flex flex-wrap justify-between gap-1 text-xs text-base-content/70">
-                                            <span>{publisher}</span>
-                                            <span>
-                                                {formatDate(
-                                                    book.data.lastPublishedDate,
-                                                    locale,
-                                                )}
-                                            </span>
-                                        </div>
-                                        <div class="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-t border-base-300 text-xs sm:flex">
-                                            <div class="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                                                <span>
-                                                    <strong class="text-base-content">
-                                                        {displayVolume}
-                                                    </strong>
-                                                </span>
-                                                {gap !== undefined &&
-                                                    gap !== 0 && (
-                                                        <span class="text-primary">
-                                                            {gapLabel(
-                                                                gap,
-                                                                translate,
-                                                                plural,
-                                                            )}
-                                                        </span>
-                                                    )}
-                                            </div>
-                                            <a
-                                                class="btn btn-ghost btn-square btn-xs sm:ml-auto"
-                                                href={localePath(
-                                                    locale,
-                                                    `${book.id}/`,
-                                                )}
-                                                aria-label={`${translate("details")}: ${book.data.title}`}
-                                            >
-                                                <ArrowRight size={16} />
-                                            </a>
-                                        </div>
-                                    </div>
-                                </article>
-                            );
-                        })}
-                    </div>
-                    <div
-                        id="no-results"
-                        class="py-16 text-center"
-                        hidden={books.length > 0}
-                    >
-                        <Search
-                            class="mx-auto text-base-content/60"
-                            size={24}
+        <form
+            id="catalog-form"
+            method="get"
+            action={localePath(locale)}
+            data-locale={locale}
+        >
+            <input type="hidden" name="view" value={queryState.view} />
+            <div id="catalog-app" data-locale={locale} data-page={result.page}>
+                <div class="toolbar my-6 flex flex-col gap-3 lg:flex-row">
+                    <label class="input search-box w-full min-w-0 lg:flex-1">
+                        <Search size={18} aria-hidden="true" />
+                        <span class="sr-only">{translate("searchLabel")}</span>
+                        <input
+                            id="search"
+                            name="q"
+                            value={queryState.q}
+                            class="min-w-0 text-xs sm:text-sm"
+                            type="search"
+                            placeholder={translate("search")}
+                            autocomplete="off"
                         />
-                        <h3 class="mt-3 font-semibold">
-                            {books.length
-                                ? translate("noResults")
-                                : translate("empty")}
-                        </h3>
-                        {books.length > 0 && (
-                            <>
-                                <p class="mt-2 text-sm text-base-content/70">
-                                    {translate("noResultsHint")}
-                                </p>
-                                <button
-                                    class="btn btn-ghost btn-sm reset-button mt-4"
-                                    type="button"
-                                >
-                                    <X size={15} /> {translate("reset")}
-                                </button>
-                            </>
-                        )}
-                    </div>
-                    <nav
-                        id="pagination"
-                        class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-5 text-sm"
-                        aria-label={translate("pagination")}
-                        data-page-status={i18n.raw<string>("pageStatus")}
-                        hidden
-                    >
-                        <label class="flex items-center gap-2">
-                            {translate("perPage")}
+                    </label>
+                    <div class="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                        <label class="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                            <ArrowDownUp size={16} aria-hidden="true" />
+                            <span class="sr-only">{translate("sort")}</span>
                             <select
-                                id="page-size"
-                                class="select select-sm w-auto"
+                                id="sort"
+                                name="sort"
+                                class="select select-sm w-full sm:w-auto"
                             >
-                                <option value="12">12</option>
-                                <option value="24">24</option>
-                                <option value="36">36</option>
+                                <option
+                                    value="date-desc"
+                                    selected={queryState.sort === "date-desc"}
+                                >
+                                    {translate("newest")}
+                                </option>
+                                <option
+                                    value="date-asc"
+                                    selected={queryState.sort === "date-asc"}
+                                >
+                                    {translate("oldest")}
+                                </option>
+                                <option
+                                    value="title-asc"
+                                    selected={queryState.sort === "title-asc"}
+                                >
+                                    {translate("titleAsc")}
+                                </option>
+                                <option
+                                    value="title-desc"
+                                    selected={queryState.sort === "title-desc"}
+                                >
+                                    {translate("titleDesc")}
+                                </option>
+                                <option
+                                    value="volume-desc"
+                                    selected={queryState.sort === "volume-desc"}
+                                >
+                                    {translate("volumeDesc")}
+                                </option>
+                                <option
+                                    value="volume-asc"
+                                    selected={queryState.sort === "volume-asc"}
+                                >
+                                    {translate("volumeAsc")}
+                                </option>
+                                <option
+                                    value="gap-desc"
+                                    selected={queryState.sort === "gap-desc"}
+                                >
+                                    {translate("gapDesc")}
+                                </option>
+                                <option
+                                    value="gap-asc"
+                                    selected={queryState.sort === "gap-asc"}
+                                >
+                                    {translate("gapAsc")}
+                                </option>
                             </select>
                         </label>
-                        <div class="join">
+                        <div
+                            class="join ml-auto"
+                            role="group"
+                            aria-label={translate("display")}
+                        >
                             <button
-                                id="previous-page"
-                                class="btn btn-square btn-sm join-item"
                                 type="button"
-                                aria-label={translate("previousPage")}
-                                title={translate("previousPage")}
+                                class:list={[
+                                    "btn btn-sm btn-square join-item view-button",
+                                    {
+                                        "btn-active":
+                                            queryState.view === "grid",
+                                    },
+                                ]}
+                                data-view="grid"
+                                aria-label={translate("grid")}
+                                title={translate("grid")}
+                                aria-pressed={queryState.view === "grid"}
                             >
-                                <ChevronLeft size={18} />
+                                <LayoutGrid size={17} />
                             </button>
-                            <span
-                                id="page-status"
-                                class="join-item flex min-w-24 items-center justify-center bg-base-200 px-3 text-xs"
-                                aria-live="polite"
-                            ></span>
                             <button
-                                id="next-page"
-                                class="btn btn-square btn-sm join-item"
                                 type="button"
-                                aria-label={translate("nextPage")}
-                                title={translate("nextPage")}
+                                class:list={[
+                                    "btn btn-sm btn-square join-item view-button",
+                                    {
+                                        "btn-active":
+                                            queryState.view === "list",
+                                    },
+                                ]}
+                                data-view="list"
+                                aria-label={translate("list")}
+                                title={translate("list")}
+                                aria-pressed={queryState.view === "list"}
                             >
-                                <ChevronRight size={18} />
+                                <List size={18} />
                             </button>
                         </div>
-                    </nav>
+                        <button class="btn btn-primary btn-sm" type="submit">
+                            {translate("applyFilters")}
+                        </button>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-6 min-[901px]:flex-row">
+                    <aside class="filter-panel grid grid-cols-2 gap-x-3 min-[901px]:block min-[901px]:w-48 min-[901px]:shrink-0">
+                        <div class="col-span-2 flex items-center justify-between border-b border-base-300 py-3">
+                            <span class="flex items-center gap-2 text-sm font-semibold">
+                                <SlidersHorizontal size={16} />{" "}
+                                {translate("filters")}
+                            </span>
+                            <a
+                                class="btn btn-ghost btn-xs"
+                                href={localePath(locale)}
+                            >
+                                {translate("clear")}
+                            </a>
+                        </div>
+                        {(
+                            [
+                                ["format", translate("format")],
+                                ["status", translate("statusFilter")],
+                                ["origin", translate("origin")],
+                                ["publisher", translate("publisher")],
+                                ["language", translate("bookLanguage")],
+                            ] as const
+                        ).map(([key, label]) => (
+                            <fieldset class="fieldset border-b border-base-300 py-3">
+                                <legend class="fieldset-legend">{label}</legend>
+                                <label class="sr-only" for={`filter-${key}`}>
+                                    {label}
+                                </label>
+                                <select
+                                    id={`filter-${key}`}
+                                    name={key}
+                                    class="select select-sm w-full"
+                                    data-filter={key}
+                                >
+                                    <option
+                                        value="all"
+                                        selected={
+                                            !queryState.filters[key] &&
+                                            (key === "status" ||
+                                                queryState.filters[key] === "")
+                                        }
+                                    >
+                                        {translate("all")}
+                                    </option>
+                                    {values(key).map((value) => (
+                                        <option
+                                            value={value}
+                                            selected={
+                                                queryState.filters[key] ===
+                                                value
+                                            }
+                                        >
+                                            {key === "status"
+                                                ? translate(
+                                                      statusLabels[
+                                                          value as BookStatus
+                                                      ],
+                                                  )
+                                                : key === "publisher"
+                                                  ? publisherById.get(value) ||
+                                                    value
+                                                  : key === "origin"
+                                                    ? value === "unknown"
+                                                        ? translate("unknown")
+                                                        : formatCountry(
+                                                              value,
+                                                              locale,
+                                                          )
+                                                    : key === "format"
+                                                      ? formatLabel(
+                                                            value,
+                                                            translate,
+                                                        )
+                                                      : value === "unknown"
+                                                        ? translate("unknown")
+                                                        : key === "language"
+                                                          ? formatLanguage(
+                                                                value,
+                                                                locale,
+                                                            )
+                                                          : value}
+                                        </option>
+                                    ))}
+                                </select>
+                            </fieldset>
+                        ))}
+                    </aside>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex min-h-12 items-center justify-between border-y border-base-300 text-sm text-base-content/70">
+                            <span>
+                                <strong
+                                    id="result-count"
+                                    class="text-base-content"
+                                >
+                                    {result.total}
+                                </strong>{" "}
+                                {translate("results")}
+                            </span>
+                            <span class="hidden text-xs sm:inline">
+                                <span id="result-range">
+                                    {result.total
+                                        ? `${String(result.start + 1).padStart(2, "0")}—${String(Math.min(result.start + result.perPage, result.total)).padStart(2, "0")}`
+                                        : "00—00"}
+                                </span>
+                            </span>
+                        </div>
+                        <div
+                            id="book-list"
+                            class:list={[
+                                "book-grid grid gap-x-3 gap-y-8 pt-6 sm:gap-x-5",
+                                queryState.view === "list"
+                                    ? "list-view grid-cols-1"
+                                    : "grid-cols-2 min-[901px]:grid-cols-3 min-[1201px]:grid-cols-4",
+                            ]}
+                        >
+                            {pageBooks.map((row, index) => {
+                                const {
+                                    book,
+                                    gapValue: gap,
+                                    volumeValue: volume,
+                                    status,
+                                    format,
+                                    publisherName: publisher,
+                                    displayOrigin: origin,
+                                } = row;
+                                const globalIndex = result.start + index;
+                                const displayVolume =
+                                    typeof volume === "number"
+                                        ? translate("numberedVolume", {
+                                              volume,
+                                          })
+                                        : volume;
+                                return (
+                                    <article
+                                        class:list={[
+                                            "card card-sm book-card min-w-0",
+                                            {
+                                                "flex-row gap-4":
+                                                    queryState.view === "list",
+                                            },
+                                        ]}
+                                        data-id={book.id}
+                                        data-title={book.data.title}
+                                        data-search={row.search}
+                                        data-publisher={row.publisher}
+                                        data-format={format}
+                                        data-origin={origin}
+                                        data-status={status}
+                                        data-language={book.data.language}
+                                        data-date={row.date}
+                                        data-volume={volume}
+                                        data-gap={gap ?? ""}
+                                    >
+                                        <a
+                                            class:list={[
+                                                "book-cover relative flex aspect-[2/3] flex-col justify-between self-start overflow-hidden rounded-box p-3 sm:p-4",
+                                                queryState.view === "list"
+                                                    ? "w-28 shrink-0 sm:w-36"
+                                                    : "w-full",
+                                                coverStyles[
+                                                    globalIndex %
+                                                        coverStyles.length
+                                                ],
+                                            ]}
+                                            href={localePath(
+                                                locale,
+                                                `${book.id}/`,
+                                            )}
+                                            aria-label={`${translate("details")}: ${book.data.title}`}
+                                        >
+                                            {book.data.cover ? (
+                                                <img
+                                                    class="absolute inset-0 h-full w-full bg-base-300 object-contain"
+                                                    src={book.data.cover}
+                                                    alt=""
+                                                    loading="lazy"
+                                                />
+                                            ) : (
+                                                <>
+                                                    <span class="text-[10px] font-semibold">
+                                                        AXED BOOKS /{" "}
+                                                        {String(
+                                                            globalIndex + 1,
+                                                        ).padStart(2, "0")}
+                                                    </span>
+                                                    <span class="line-clamp-4 break-words font-serif text-sm font-bold sm:text-lg">
+                                                        {book.data.title}
+                                                    </span>
+                                                    <span class="flex justify-between gap-2 text-[10px]">
+                                                        <span>
+                                                            {formatLabel(
+                                                                format,
+                                                                translate,
+                                                            )}
+                                                        </span>
+                                                        <span>
+                                                            {displayVolume}
+                                                        </span>
+                                                    </span>
+                                                </>
+                                            )}
+                                        </a>
+                                        <div
+                                            class:list={[
+                                                "card-body book-info min-w-0 gap-2 p-0",
+                                                {
+                                                    "mt-3":
+                                                        queryState.view !==
+                                                        "list",
+                                                },
+                                            ]}
+                                        >
+                                            <div class="book-tags flex flex-wrap gap-1">
+                                                <span
+                                                    class:list={[
+                                                        "badge badge-soft badge-sm status-badge",
+                                                        statusColors[status],
+                                                    ]}
+                                                >
+                                                    {translate(
+                                                        statusLabels[status],
+                                                    )}
+                                                </span>
+                                                <span class="badge badge-soft badge-secondary badge-sm">
+                                                    {formatLabel(
+                                                        format,
+                                                        translate,
+                                                    )}
+                                                </span>
+                                                <span class="badge badge-soft badge-primary badge-sm">
+                                                    {origin === "unknown"
+                                                        ? translate("unknown")
+                                                        : formatCountry(
+                                                              origin,
+                                                              locale,
+                                                          )}
+                                                </span>
+                                                {book.data.fictional && (
+                                                    <span class="badge badge-soft badge-warning badge-sm">
+                                                        {translate("fiction")}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <h3 class="card-title break-words font-serif text-base">
+                                                <a
+                                                    class="link link-hover"
+                                                    href={localePath(
+                                                        locale,
+                                                        `${book.id}/`,
+                                                    )}
+                                                >
+                                                    {book.data.title}
+                                                </a>
+                                            </h3>
+                                            <p class="text-xs text-base-content/70">
+                                                {formatAuthors(
+                                                    book.data.authors,
+                                                    locale,
+                                                )}
+                                            </p>
+                                            <div class="flex flex-wrap justify-between gap-1 text-xs text-base-content/70">
+                                                <span>{publisher}</span>
+                                                <span>
+                                                    {formatDate(
+                                                        book.data
+                                                            .lastPublishedDate,
+                                                        locale,
+                                                    )}
+                                                </span>
+                                            </div>
+                                            <div class="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-t border-base-300 text-xs sm:flex">
+                                                <div class="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                                                    <span>
+                                                        <strong class="text-base-content">
+                                                            {displayVolume}
+                                                        </strong>
+                                                    </span>
+                                                    {gap !== undefined &&
+                                                        gap !== 0 && (
+                                                            <span class="text-primary">
+                                                                {gapLabel(
+                                                                    gap,
+                                                                    translate,
+                                                                    plural,
+                                                                )}
+                                                            </span>
+                                                        )}
+                                                </div>
+                                                <a
+                                                    class="btn btn-ghost btn-square btn-xs sm:ml-auto"
+                                                    href={localePath(
+                                                        locale,
+                                                        `${book.id}/`,
+                                                    )}
+                                                    aria-label={`${translate("details")}: ${book.data.title}`}
+                                                >
+                                                    <ArrowRight size={16} />
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </div>
+                        <div
+                            id="no-results"
+                            class="py-16 text-center"
+                            hidden={result.total > 0}
+                        >
+                            <Search
+                                class="mx-auto text-base-content/60"
+                                size={24}
+                            />
+                            <h3 class="mt-3 font-semibold">
+                                {books.length
+                                    ? translate("noResults")
+                                    : translate("empty")}
+                            </h3>
+                            {books.length > 0 && (
+                                <>
+                                    <p class="mt-2 text-sm text-base-content/70">
+                                        {translate("noResultsHint")}
+                                    </p>
+                                    <a
+                                        class="btn btn-ghost btn-sm mt-4"
+                                        href={localePath(locale)}
+                                    >
+                                        <X size={15} /> {translate("reset")}
+                                    </a>
+                                </>
+                            )}
+                        </div>
+                        <nav
+                            id="pagination"
+                            class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-5 text-sm"
+                            aria-label={translate("pagination")}
+                            hidden={result.total === 0}
+                        >
+                            <label class="flex items-center gap-2">
+                                {translate("perPage")}
+                                <select
+                                    id="page-size"
+                                    name="perPage"
+                                    class="select select-sm w-auto"
+                                >
+                                    {catalogPageSizes.map((size) => (
+                                        <option
+                                            value={size}
+                                            selected={
+                                                queryState.perPage === size
+                                            }
+                                        >
+                                            {size}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                            <div class="join">
+                                <a
+                                    id="previous-page"
+                                    class:list={[
+                                        "btn btn-square btn-sm join-item",
+                                        {
+                                            "btn-disabled": result.page <= 1,
+                                        },
+                                    ]}
+                                    href={
+                                        result.page > 1
+                                            ? catalogUrl(
+                                                  localePath(locale),
+                                                  queryState,
+                                                  result.page - 1,
+                                              )
+                                            : undefined
+                                    }
+                                    aria-disabled={result.page <= 1}
+                                    tabindex={result.page <= 1 ? -1 : undefined}
+                                    aria-label={translate("previousPage")}
+                                    title={translate("previousPage")}
+                                >
+                                    <ChevronLeft size={18} />
+                                </a>
+                                <span
+                                    id="page-status"
+                                    class="join-item flex min-w-24 items-center justify-center bg-base-200 px-3 text-xs"
+                                    aria-live="polite"
+                                >
+                                    {translate("pageStatus", {
+                                        page: result.page,
+                                        total: result.pages,
+                                    })}
+                                </span>
+                                <a
+                                    id="next-page"
+                                    class:list={[
+                                        "btn btn-square btn-sm join-item",
+                                        {
+                                            "btn-disabled":
+                                                result.page >= result.pages,
+                                        },
+                                    ]}
+                                    href={
+                                        result.page < result.pages
+                                            ? catalogUrl(
+                                                  localePath(locale),
+                                                  queryState,
+                                                  result.page + 1,
+                                              )
+                                            : undefined
+                                    }
+                                    aria-disabled={result.page >= result.pages}
+                                    tabindex={
+                                        result.page >= result.pages
+                                            ? -1
+                                            : undefined
+                                    }
+                                    aria-label={translate("nextPage")}
+                                    title={translate("nextPage")}
+                                >
+                                    <ChevronRight size={18} />
+                                </a>
+                            </div>
+                        </nav>
+                    </div>
                 </div>
             </div>
-        </div>
+        </form>
     </section>
 </Layout>
-<script src="../scripts/catalog.ts"></script>
+<script src="../scripts/catalog-ssr.ts"></script>

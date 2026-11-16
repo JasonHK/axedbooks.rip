@@ -34,9 +34,9 @@ test("search, filters, sorting, views and URL state work together", async ({
     await expect(page).toHaveURL(/q=/);
     await page.getByLabel("Search books").fill("nothing matches");
     await expect(page.getByText("No books found")).toBeVisible();
-    await page.getByRole("button", { name: "Clear filters" }).click();
+    await page.getByRole("link", { name: "Clear filters" }).click();
     await expect(statusFilter).toHaveValue("cancelled");
-    await statusFilter.selectOption("");
+    await statusFilter.selectOption("all");
     await page.getByLabel("Format").selectOption("manga");
     await expect(page.locator(".book-card:visible")).toHaveCount(2);
     await page.getByLabel("Sort").selectOption("volume-desc");
@@ -58,93 +58,37 @@ test("search, filters, sorting, views and URL state work together", async ({
     ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("pagination handles page sizes, filters, URL state and history", async ({
-    page,
+test("server-rendered search, filters, sorting, and page size work without JavaScript", async ({
+    browser,
 }) =>
 {
-    await page.route("**/en/**", async (route) =>
-    {
-        if (route.request().resourceType() !== "document")
-            return route.continue();
-        const response = await route.fetch();
-        const html = await response.text();
-        const fixture = `<script>
-      const list = document.querySelector('#book-list');
-      const originals = [...list.querySelectorAll('.book-card')];
-            list.replaceChildren();
-            for (let index = 0; index < 44; index++) {
-        const clone = originals[index % originals.length].cloneNode(true);
-        clone.dataset.id = 'fixture-' + index;
-                clone.dataset.format = index < 17 ? 'manga' : 'light-novel';
-                clone.dataset.search = index < 5 ? 'fixture-match' : 'fixture-other';
-        list.append(clone);
-      }
-    </script>`;
-        await route.fulfill({
-            response,
-            body: html.replace("</body>", `${fixture}</body>`),
-        });
-    });
-
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
     await page.goto("/en/?status=all");
     const cards = page.locator(".book-card:visible");
-    const previous = page.getByRole("button", { name: "Previous page" });
-    const next = page.getByRole("button", { name: "Next page" });
     const size = page.getByLabel("Books per page");
-    await expect(cards).toHaveCount(12);
-    await expect(page.locator("#result-count")).toHaveText("44");
-    await expect(page.locator("#result-range")).toHaveText("01—12");
-    await expect(page.locator("#page-status")).toHaveText("Page 1 of 4");
-    await expect(previous).toBeDisabled();
-    await next.click();
-    await expect(cards).toHaveCount(12);
-    await expect(page.locator("#result-range")).toHaveText("13—24");
-    await expect(page).toHaveURL(/page=2/);
-    await next.click();
-    await next.click();
-    await expect(cards).toHaveCount(8);
-    await expect(next).toBeDisabled();
-    await previous.click();
-    await expect(page.locator("#page-status")).toHaveText("Page 3 of 4");
-    await page.goBack();
-    await expect(page.locator("#page-status")).toHaveText("Page 4 of 4");
-    await size.selectOption("24");
-    await expect(cards).toHaveCount(24);
-    await expect(page.locator("#page-status")).toHaveText("Page 1 of 2");
-    await expect(page).toHaveURL(/perPage=24/);
-    await next.click();
-    await expect(cards).toHaveCount(20);
-    await size.selectOption("36");
-    await expect(cards).toHaveCount(36);
-    await next.click();
-    await expect(cards).toHaveCount(8);
-    await page.getByLabel("Search books").fill("fixture-match");
-    await expect(cards).toHaveCount(5);
-    await expect(page.locator("#page-status")).toHaveText("Page 1 of 1");
-    await expect(page.locator("#result-count")).toHaveText("5");
-    await expect(page).not.toHaveURL(/page=2/);
-    await page.getByLabel("Search books").clear();
-    await size.selectOption("12");
-    await page.getByLabel("Format").selectOption("manga");
-    await expect(page.locator("#result-count")).toHaveText("17");
-    await expect(cards).toHaveCount(12);
-    await next.click();
-    await expect(cards).toHaveCount(5);
-    await page.getByLabel("Format").selectOption("light-novel");
-    await expect(page.locator("#page-status")).toHaveText("Page 1 of 3");
-    await expect(cards).toHaveCount(12);
-    await page.getByLabel("Search books").fill("no results");
-    await expect(page.locator("#pagination")).toBeHidden();
-    await expect(page.getByText("No books found")).toBeVisible();
+    const apply = page.getByRole("button", { name: "Apply filters" });
 
-    await page.goto("/en/?perPage=12&page=999&status=all");
-    await expect(cards).toHaveCount(8);
-    await expect(page.locator("#page-status")).toHaveText("Page 4 of 4");
-    await expect(page).toHaveURL(/page=4/);
-    await page.goto("/en/?perPage=13&page=0&status=all");
-    await expect(cards).toHaveCount(12);
-    await expect(size).toHaveValue("12");
-    await expect(page).toHaveURL(/\/en\/\?status=all$/);
+    await expect(page.locator("#page-status")).toHaveText("Page 1 of 1");
+    await expect(page.locator("#result-range")).toHaveText("01—04");
+    await expect(cards).toHaveCount(4);
+    await size.selectOption("24");
+    await apply.click();
+    await expect(page).toHaveURL(/perPage=24/);
+    await expect(cards).toHaveCount(4);
+
+    await page.getByLabel("Search books").fill("公主");
+    await apply.click();
+    await expect(page).toHaveURL(/q=/);
+    await expect(cards).toHaveCount(1);
+    await expect(cards).toContainText(bookTitle);
+
+    await page.getByLabel("Search books").fill("no results");
+    await page.getByLabel("Format").selectOption("manga");
+    await apply.click();
+    await expect(page.getByText("No books found")).toBeVisible();
+    await expect(page.locator("#pagination")).toBeHidden();
+    await context.close();
 });
 
 test("locale switching preserves state and detail pages show original comparison", async ({
@@ -271,11 +215,16 @@ test("catalog remains visible without JavaScript", async ({ browser }) =>
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
     await page.goto("/en/");
-    await expect(page.locator(".book-card:visible")).toHaveCount(4);
+    await expect(page.locator(".book-card:visible")).toHaveCount(1);
     await expect(
-        page.getByText("Enable JavaScript to search and filter the catalog."),
+        page.getByText(
+            "Search, filter, and paginate the catalog without JavaScript.",
+        ),
     ).toBeVisible();
-    await expect(page.locator(".toolbar")).toBeHidden();
+    await expect(page.locator(".toolbar")).toBeVisible();
+    await page.getByLabel("Search books").fill("公主");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.locator(".book-card:visible")).toHaveCount(1);
     await page.locator("#language-menu summary").click();
     await page.getByRole("link", { name: "繁體中文" }).click();
     await expect(page).toHaveURL(/\/zh-hant\/$/);

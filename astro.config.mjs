@@ -1,9 +1,12 @@
 import { defineConfig } from "astro/config";
+import cloudflare from "@astrojs/cloudflare";
 import tailwindcss from "@tailwindcss/vite";
 import astroI18n from "@ariaskit/astro-i18n/integration";
 
 export default defineConfig({
     site: "https://axedbooks.rip",
+    output: "server",
+    adapter: cloudflare({ prerenderEnvironment: "node" }),
     trailingSlash: "always",
     vite: { plugins: [tailwindcss()] },
     devToolbar: { enabled: false },

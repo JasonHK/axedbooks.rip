@@ -1,6 +1,6 @@
 # Axed Books
 
-A static catalog of unfinished book editions, with a focus on manga and light novels. The included records are fictional demonstrations, not claims about real books or publishers.
+A server-rendered catalog of unfinished book editions, with a focus on manga and light novels. The included records are fictional demonstrations, not claims about real books or publishers. Catalog search, filters, and pagination work with or without JavaScript; book detail pages are pre-rendered.
 
 ## Development
 
@@ -16,7 +16,7 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-Deploy the generated `dist` directory to any static host. Changes to records require a rebuild and redeployment; there is no runtime backend.
+Deploy the generated `dist` directory to Cloudflare Pages with `pnpm exec wrangler pages deploy dist`. The catalog requires the Cloudflare runtime; it is not compatible with static-only hosting. Book details and assets are pre-rendered, and changes to records require a rebuild and redeployment.
 
 ## Adding books
 
