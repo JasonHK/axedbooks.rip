@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ariaskit/astro-i18n": "^1.0.1",
+    "@astrojs/cloudflare": "^14.4.8",
     "@lucide/astro": "^1.72.0",
     "@tailwindcss/vite": "^4.3.5",
     "astro": "^7.4.11",
