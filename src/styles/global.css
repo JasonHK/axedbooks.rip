@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@plugin "daisyui"
+{
+  themes: false;
+}
+
+@theme
+{
+  --font-sans: "DM Sans", "Noto Serif TC", sans-serif;
+  --font-serif: "Noto Serif TC", serif;
+}
+
+@plugin "daisyui/theme"
+{
+  name: "archive";
+  default: true;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f6f3;
+  --color-base-300: #e4e8e4;
+  --color-base-content: #202c29;
+  --color-primary: #b23c31;
+  --color-primary-content: #ffffff;
+  --color-secondary: #315e57;
+  --color-secondary-content: #ffffff;
+  --color-accent: #d3a33c;
+  --color-accent-content: #202c29;
+  --color-neutral: #263d35;
+  --color-neutral-content: #e9f0e9;
+  --color-info: #236078;
+  --color-info-content: #ffffff;
+  --color-success: #27644b;
+  --color-success-content: #ffffff;
+  --color-warning: #9c610a;
+  --color-warning-content: #ffffff;
+  --color-error: #a53131;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme"
+{
+  name: "archive-dark";
+  color-scheme: dark;
+  --color-base-100: #202a26;
+  --color-base-200: #171f1c;
+  --color-base-300: #36433c;
+  --color-base-content: #e4eee6;
+  --color-primary: #ed9983;
+  --color-primary-content: #241611;
+  --color-secondary: #9dc9b3;
+  --color-secondary-content: #14251c;
+  --color-accent: #e4bd70;
+  --color-accent-content: #241c0d;
+  --color-neutral: #101714;
+  --color-neutral-content: #e9f0e9;
+  --color-info: #94c7d9;
+  --color-info-content: #10232b;
+  --color-success: #91d4ae;
+  --color-success-content: #11291b;
+  --color-warning: #e4bd70;
+  --color-warning-content: #241c0d;
+  --color-error: #f0a3a0;
+  --color-error-content: #321412;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+[hidden]
+{
+  display: none !important;
+}

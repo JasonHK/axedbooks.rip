@@ -1,0 +1,361 @@
+---
+import {
+    ArrowUpRight,
+    BookOpen,
+    Check,
+    Globe,
+    Monitor,
+    Moon,
+    Sun,
+} from "@lucide/astro";
+import { useI18n } from "@ariaskit/astro-i18n";
+import { htmlLang, localePath, type Locale } from "../lib/i18n";
+import "../styles/global.css";
+interface Props {
+    locale: Locale;
+    title?: string;
+    path?: string;
+}
+const { locale, title, path = "" } = Astro.props;
+const { t: translate } = useI18n(
+    { locals: { ...Astro.locals }, url: Astro.url },
+    { locale },
+);
+const languages = [
+    { locale: "zh-hant", label: "繁體中文", lang: "zh-Hant" },
+    { locale: "zh-hans", label: "简体中文", lang: "zh-Hans" },
+    { locale: "en", label: "English", lang: "en" },
+] as const;
+---
+
+<!doctype html>
+<html lang={htmlLang(locale)} data-theme="archive">
+    <head>
+        <script is:inline>
+            try {
+                const savedTheme = localStorage.getItem("axedbooks-theme");
+                document.documentElement.dataset.theme =
+                    savedTheme === "dark" ||
+                    (savedTheme !== "light" &&
+                        window.matchMedia("(prefers-color-scheme: dark)")
+                            .matches)
+                        ? "archive-dark"
+                        : "archive";
+            } catch {
+                document.documentElement.dataset.theme = window.matchMedia(
+                    "(prefers-color-scheme: dark)",
+                ).matches
+                    ? "archive-dark"
+                    : "archive";
+            }
+        </script>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content={translate("intro")} />
+        <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+        <title>{title ? `${title} | Axed Books` : `Axed Books | ${translate("catalogTitle")}`}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            rel="preconnect"
+            href="https://fonts.gstatic.com"
+            crossorigin="anonymous"
+        />
+        <link
+            href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Serif+TC:wght@400;500;600;700;900&display=swap"
+            rel="stylesheet"
+        />
+    </head>
+    <body>
+        <a
+            class="btn btn-neutral sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50"
+            href="#main"
+        >
+            {translate("skipToContent")}
+        </a>
+        <header class="border-b border-base-300 bg-base-100">
+            <div class="navbar mx-auto max-w-[1312px] gap-2 px-4 sm:px-6 lg:px-9">
+                <div class="navbar-start w-auto min-w-0 flex-1 gap-4">
+                    <a
+                        class="flex shrink-0 items-center gap-2 font-semibold"
+                        href={localePath(locale)}
+                        aria-label={translate("homeLink")}
+                    >
+                        <span class="grid size-9 place-items-center rounded-field bg-primary text-primary-content">
+                            <BookOpen size={19} stroke-width={2} />
+                        </span>
+                        <span>Axed Books</span>
+                    </a>
+                    <nav
+                        class="hidden md:block"
+                        aria-label={translate("mainNavigation")}
+                    >
+                        <ul class="menu menu-horizontal menu-sm">
+                            <li>
+                                <a href={localePath(locale)}>
+                                    {translate("catalog")}
+                                </a>
+                            </li>
+                            <li>
+                                <a href={`${localePath(locale)}#about`}>
+                                    {translate("about")}{" "}
+                                    <ArrowUpRight size={13} />
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+                <div class="navbar-end w-auto shrink-0 gap-1">
+                    <details id="language-menu" class="dropdown dropdown-end">
+                        <summary
+                            class="btn btn-ghost btn-square btn-sm"
+                            aria-label={translate("language")}
+                            title={translate("language")}
+                        >
+                            <Globe size={18} aria-hidden="true" />
+                        </summary>
+                        <ul
+                            class="dropdown-content menu menu-sm z-10 mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+                            aria-label={translate("language")}
+                        >
+                            {languages.map((language) => (
+                                <li>
+                                    <a
+                                        class:list={[
+                                            {
+                                                "menu-active":
+                                                    language.locale === locale,
+                                            },
+                                        ]}
+                                        href={localePath(language.locale, path)}
+                                        lang={language.lang}
+                                        hreflang={language.lang}
+                                        aria-current={
+                                            language.locale === locale
+                                                ? "page"
+                                                : undefined
+                                        }
+                                    >
+                                        {language.label}
+                                        {language.locale === locale && (
+                                            <Check
+                                                class="ml-auto"
+                                                size={16}
+                                                aria-hidden="true"
+                                            />
+                                        )}
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                    <details
+                        id="theme-menu"
+                        class="dropdown dropdown-end"
+                        hidden
+                    >
+                        <summary
+                            class="btn btn-ghost btn-square btn-sm"
+                            aria-label={translate("theme")}
+                            title={translate("theme")}
+                        >
+                            <Monitor
+                                class="theme-system"
+                                size={18}
+                                aria-hidden="true"
+                            />
+                            <Sun
+                                class="theme-light hidden"
+                                size={18}
+                                aria-hidden="true"
+                            />
+                            <Moon
+                                class="theme-dark hidden"
+                                size={18}
+                                aria-hidden="true"
+                            />
+                        </summary>
+                        <ul
+                            class="dropdown-content menu menu-sm z-10 mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+                            aria-label={translate("theme")}
+                        >
+                            <li>
+                                <button
+                                    type="button"
+                                    data-theme-option="system"
+                                    aria-pressed="false"
+                                >
+                                    <Monitor size={16} aria-hidden="true" />{" "}
+                                    {translate("systemTheme")}{" "}
+                                    <Check
+                                        class="theme-check ml-auto hidden"
+                                        size={16}
+                                        aria-hidden="true"
+                                    />
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    data-theme-option="light"
+                                    aria-pressed="false"
+                                >
+                                    <Sun size={16} aria-hidden="true" />{" "}
+                                    {translate("lightTheme")}{" "}
+                                    <Check
+                                        class="theme-check ml-auto hidden"
+                                        size={16}
+                                        aria-hidden="true"
+                                    />
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    data-theme-option="dark"
+                                    aria-pressed="false"
+                                >
+                                    <Moon size={16} aria-hidden="true" />{" "}
+                                    {translate("darkTheme")}{" "}
+                                    <Check
+                                        class="theme-check ml-auto hidden"
+                                        size={16}
+                                        aria-hidden="true"
+                                    />
+                                </button>
+                            </li>
+                        </ul>
+                    </details>
+                </div>
+            </div>
+        </header>
+        <main id="main">
+            <slot />
+        </main>
+        <footer id="about" class="bg-neutral text-neutral-content">
+            <div class="footer footer-vertical mx-auto max-w-[1312px] gap-6 px-4 py-10 sm:footer-horizontal sm:px-6 lg:px-9">
+                <aside>
+                    <strong class="text-base">Axed Books</strong>
+                    <p class="text-sm">{translate("footer")}</p>
+                    <p class="max-w-2xl text-xs leading-5 text-neutral-content/80">
+                        {translate("coverCopyright")}
+                    </p>
+                </aside>
+                <nav>
+                    <span class="footer-title">axedbooks.rip</span>
+                    <span class="text-xs text-neutral-content/80">
+                        {translate("issue")}
+                    </span>
+                </nav>
+            </div>
+        </footer>
+        <script>
+            const languageMenu =
+                document.querySelector<HTMLDetailsElement>("#language-menu");
+            const menu =
+                document.querySelector<HTMLDetailsElement>("#theme-menu");
+            const dropdowns = [languageMenu, menu].filter(
+                (dropdown): dropdown is HTMLDetailsElement => dropdown !== null,
+            );
+            const updateLanguageLinks = () => {
+                for (const link of languageMenu?.querySelectorAll<HTMLAnchorElement>(
+                    "a",
+                ) ?? []) {
+                    const url = new URL(link.href);
+                    url.search = window.location.search;
+                    link.href = url.href;
+                }
+            };
+            for (const dropdown of dropdowns) {
+                dropdown.addEventListener("toggle", () => {
+                    if (!dropdown.open) return;
+                    for (const other of dropdowns)
+                        if (other !== dropdown) other.open = false;
+                    if (dropdown === languageMenu) updateLanguageLinks();
+                });
+                dropdown.addEventListener("keydown", (event) => {
+                    if (event.key === "Escape") {
+                        dropdown.open = false;
+                        dropdown.querySelector("summary")?.focus();
+                    }
+                });
+            }
+            for (const event of ["click", "auxclick", "contextmenu"])
+                languageMenu?.addEventListener(event, updateLanguageLinks);
+            document.addEventListener("click", (event) => {
+                for (const dropdown of dropdowns)
+                    if (!dropdown.contains(event.target as Node))
+                        dropdown.open = false;
+            });
+            const preferred = window.matchMedia("(prefers-color-scheme: dark)");
+            type ThemeChoice = "system" | "light" | "dark";
+            const readChoice = (): ThemeChoice => {
+                try {
+                    const value = localStorage.getItem("axedbooks-theme");
+                    return value === "light" || value === "dark"
+                        ? value
+                        : "system";
+                } catch {
+                    return "system";
+                }
+            };
+            let choice = readChoice();
+            const applyTheme = () => {
+                document.documentElement.dataset.themeChoice = choice;
+                document.documentElement.dataset.theme =
+                    choice === "dark" ||
+                    (choice === "system" && preferred.matches)
+                        ? "archive-dark"
+                        : "archive";
+                for (const button of menu?.querySelectorAll<HTMLButtonElement>(
+                    "[data-theme-option]",
+                ) ?? []) {
+                    const selected = button.dataset.themeOption === choice;
+                    button.setAttribute("aria-pressed", String(selected));
+                    button.classList.toggle("menu-active", selected);
+                    button
+                        .querySelector(".theme-check")
+                        ?.classList.toggle("hidden", !selected);
+                }
+                for (const option of ["system", "light", "dark"])
+                    menu?.querySelector(`.theme-${option}`)?.classList.toggle(
+                        "hidden",
+                        option !== choice,
+                    );
+            };
+            if (menu) {
+                applyTheme();
+                menu.hidden = false;
+                menu.addEventListener("click", (event) => {
+                    const button = (
+                        event.target as Element
+                    ).closest<HTMLButtonElement>("button[data-theme-option]");
+                    const value = button?.dataset.themeOption;
+                    if (
+                        value !== "system" &&
+                        value !== "light" &&
+                        value !== "dark"
+                    )
+                        return;
+                    choice = value;
+                    try {
+                        if (choice === "system")
+                            localStorage.removeItem("axedbooks-theme");
+                        else localStorage.setItem("axedbooks-theme", choice);
+                    } catch {}
+                    applyTheme();
+                    menu.open = false;
+                    menu.querySelector("summary")?.focus();
+                });
+                preferred.addEventListener("change", () => {
+                    if (choice === "system") applyTheme();
+                });
+                window.addEventListener("storage", (event) => {
+                    if (event.key === "axedbooks-theme") {
+                        choice = readChoice();
+                        applyTheme();
+                    }
+                });
+            }
+        </script>
+    </body>
+</html>

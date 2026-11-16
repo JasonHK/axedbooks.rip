@@ -1,0 +1,55 @@
+---
+import { getCollection } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import BookDetail from "../../../../components/BookDetail.astro";
+import { bookRouteEntries, bookRouteParams } from "../../../../lib/catalog";
+import { locales, type Locale } from "../../../../lib/i18n";
+
+export async function getStaticPaths() {
+    const [books, publishers] = await Promise.all([
+        getCollection("books"),
+        getCollection("publishers"),
+    ]);
+    const publisherById = new Map(
+        publishers.map((publisher) => [publisher.id, publisher.data.name]),
+    );
+    const publisherOriginById = new Map(
+        publishers.map((publisher) => [publisher.id, publisher.data.origin]),
+    );
+    const entries = bookRouteEntries(books, new Set(publisherById.keys()));
+    return locales
+        .filter((lang) => lang !== "en")
+        .flatMap((lang) =>
+            entries.map((entry) => ({
+                ...entry,
+                params: { lang, ...entry.params },
+                props: {
+                    ...entry.props,
+                    publisherName:
+                        publisherById.get(entry.params.publisher) ||
+                        entry.params.publisher,
+                    publisherOrigin:
+                        publisherOriginById.get(entry.params.publisher) ||
+                        "unknown",
+                    sourcePublisherOrigin: entry.props.source
+                        ? publisherOriginById.get(
+                              bookRouteParams(entry.props.source.id).publisher,
+                          )
+                        : undefined,
+                },
+            })),
+        );
+}
+const { book, source, isLegacy } = Astro.props;
+const locale = Astro.params.lang as Locale;
+if (isLegacy) return Astro.redirect(getRelativeLocaleUrl(locale, book.id), 301);
+---
+
+<BookDetail
+    locale={locale}
+    book={book}
+    source={source}
+    publisherName={Astro.props.publisherName}
+    publisherOrigin={Astro.props.publisherOrigin}
+    sourcePublisherOrigin={Astro.props.sourcePublisherOrigin}
+/>

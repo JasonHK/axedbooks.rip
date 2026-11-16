@@ -1,0 +1,234 @@
+---
+import { type CollectionEntry } from "astro:content";
+import { useI18n } from "@ariaskit/astro-i18n";
+import { ArrowLeft, ArrowUpRight, BookOpen } from "@lucide/astro";
+import Layout from "../layouts/Layout.astro";
+import {
+    bookRouteParams,
+    bookStatus,
+    latestVolume,
+    volumeGap,
+} from "../lib/catalog";
+import {
+    formatDate,
+    formatAuthors,
+    formatCountry,
+    formatLabel,
+    formatLanguage,
+    gapLabel,
+    localePath,
+    type Locale,
+} from "../lib/i18n";
+interface Props {
+    locale: Locale;
+    book: CollectionEntry<"books">;
+    source?: CollectionEntry<"books">;
+    publisherName: string;
+    publisherOrigin: string;
+    sourcePublisherOrigin?: string;
+}
+const {
+    locale,
+    book,
+    source,
+    publisherName,
+    publisherOrigin,
+    sourcePublisherOrigin,
+} = Astro.props;
+const i18n = useI18n(
+    { locals: { ...Astro.locals }, url: Astro.url },
+    { locale },
+);
+const { t: translate, plural } = i18n;
+const gap = volumeGap(book, source);
+const volume = latestVolume(book);
+const displayVolume = (value: number | string) =>
+    typeof value === "number"
+        ? translate("numberedVolume", { volume: value })
+        : value;
+const format = bookRouteParams(book.id).type;
+const status = bookStatus(book, source);
+const statusLabels = {
+    releasing: "statusReleasing",
+    hiatus: "statusHiatus",
+    cancelled: "statusCancelled",
+    finished: "statusFinished",
+} as const;
+---
+
+<Layout locale={locale} title={book.data.title} path={`${book.id}/`}>
+    <div class="mx-auto max-w-[1312px] px-4 py-8 sm:px-6 lg:px-9 lg:pb-20">
+        <a class="btn btn-ghost btn-sm" href={localePath(locale)}>
+            <ArrowLeft size={16} /> {translate("back")}
+        </a>
+        {book.data.fictional && (
+            <div
+                role="alert"
+                class="alert alert-warning alert-soft mt-6 text-sm"
+            >
+                <BookOpen size={18} aria-hidden="true" />
+                <div>
+                    <strong>{translate("fiction")}</strong>
+                    <p>{translate("fictionNotice")}</p>
+                </div>
+            </div>
+        )}
+        <div class="mt-8 grid gap-8 md:grid-cols-[minmax(220px,380px)_minmax(0,1fr)] lg:gap-16">
+            <div class="detail-cover relative flex aspect-[2/3] w-full max-w-[380px] flex-col justify-between overflow-hidden rounded-box bg-neutral p-6 text-neutral-content">
+                {book.data.cover ? (
+                    <img
+                        class="absolute inset-0 h-full w-full object-contain"
+                        src={book.data.cover}
+                        alt=""
+                    />
+                ) : (
+                    <>
+                        <span class="text-xs font-semibold">
+                            AXED BOOKS / {translate("edition")}
+                        </span>
+                        <span class="break-words font-serif text-2xl font-bold">
+                            {book.data.title}
+                        </span>
+                        <span class="flex justify-between gap-2 text-xs">
+                            <span>{formatLabel(format, translate)}</span>
+                            <span>{displayVolume(volume)}</span>
+                        </span>
+                    </>
+                )}
+            </div>
+            <div>
+                <div class="flex flex-wrap gap-2">
+                    <span class="badge badge-soft badge-secondary badge-sm">
+                        {formatLabel(format, translate)}
+                    </span>
+                    <span class="badge badge-soft badge-primary badge-sm">
+                        {formatCountry(publisherOrigin, locale)}
+                    </span>
+                </div>
+                <h1 class="mt-4 break-words font-serif text-3xl font-bold">
+                    {book.data.title}
+                </h1>
+                <p class="mt-2 text-sm text-base-content/70">
+                    {formatAuthors(book.data.authors, locale)}
+                </p>
+                <dl class="my-7 grid grid-cols-2 gap-6 border-y border-base-300 py-6 text-sm">
+                    <div>
+                        <dt class="text-base-content/70">
+                            {translate("publisher")}
+                        </dt>
+                        <dd class="mt-1 font-semibold">{publisherName}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-base-content/70">
+                            {translate("bookLanguage")}
+                        </dt>
+                        <dd class="mt-1 font-semibold">
+                            {formatLanguage(book.data.language, locale)}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-base-content/70">
+                            {translate("volume")}
+                        </dt>
+                        <dd class="mt-1 font-semibold">
+                            {displayVolume(volume)}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-base-content/70">
+                            {translate("lastDate")}
+                        </dt>
+                        <dd class="mt-1 font-semibold">
+                            {formatDate(book.data.lastPublishedDate, locale)}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-base-content/70">
+                            {translate(
+                                book.data.status
+                                    ? "bookStatus"
+                                    : "estimatedStatus",
+                            )}
+                        </dt>
+                        <dd class="mt-1 font-semibold">
+                            {translate(statusLabels[status])}
+                        </dd>
+                    </div>
+                </dl>
+                {source && (
+                    <section>
+                        <h2 class="flex items-center gap-2 text-sm font-semibold">
+                            <BookOpen size={18} /> {translate("original")}
+                        </h2>
+                        <dl class="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+                            <div>
+                                <dt class="text-base-content/70">
+                                    {translate("sourceTitle")}
+                                </dt>
+                                <dd class="mt-1 font-semibold">
+                                    {source.data.title}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-base-content/70">
+                                    {translate("sourceVolume")}
+                                </dt>
+                                <dd class="mt-1 font-semibold">
+                                    {displayVolume(latestVolume(source))}
+                                </dd>
+                            </div>
+                            {sourcePublisherOrigin && (
+                                <div>
+                                    <dt class="text-base-content/70">
+                                        {translate("origin")}
+                                    </dt>
+                                    <dd class="mt-1 font-semibold">
+                                        {formatCountry(
+                                            sourcePublisherOrigin,
+                                            locale,
+                                        )}
+                                    </dd>
+                                </div>
+                            )}
+                            <div>
+                                <dt class="text-base-content/70">
+                                    {translate("edition")}
+                                </dt>
+                                <dd class="mt-1 font-semibold">
+                                    {gapLabel(gap, translate, plural)}
+                                </dd>
+                            </div>
+                        </dl>
+                    </section>
+                )}
+                {book.data.sources.length > 0 && (
+                    <section class="mt-7 text-sm">
+                        <h2 class="font-semibold">{translate("sources")}</h2>
+                        <ul class="mt-2 break-all">
+                            {book.data.sources.map((url) => (
+                                <li>
+                                    <a
+                                        class="link link-primary inline-flex items-center gap-1"
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        {url} <ArrowUpRight size={14} />
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
+                {book.data.notes && (
+                    <section class="mt-7 text-sm">
+                        <h2 class="font-semibold">{translate("notes")}</h2>
+                        <p class="mt-2 whitespace-pre-wrap">
+                            {book.data.notes}
+                        </p>
+                    </section>
+                )}
+            </div>
+        </div>
+    </div>
+</Layout>

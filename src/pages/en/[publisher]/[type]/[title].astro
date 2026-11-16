@@ -1,0 +1,49 @@
+---
+import { getCollection } from "astro:content";
+import { getRelativeLocaleUrl } from "astro:i18n";
+import BookDetail from "../../../../components/BookDetail.astro";
+import { bookRouteEntries, bookRouteParams } from "../../../../lib/catalog";
+
+export async function getStaticPaths() {
+    const [books, publishers] = await Promise.all([
+        getCollection("books"),
+        getCollection("publishers"),
+    ]);
+    const publisherById = new Map(
+        publishers.map((publisher) => [publisher.id, publisher.data.name]),
+    );
+    const publisherOriginById = new Map(
+        publishers.map((publisher) => [publisher.id, publisher.data.origin]),
+    );
+    return bookRouteEntries(books, new Set(publisherById.keys())).map(
+        (entry) => ({
+            ...entry,
+            props: {
+                ...entry.props,
+                publisherName:
+                    publisherById.get(entry.params.publisher) ||
+                    entry.params.publisher,
+                publisherOrigin:
+                    publisherOriginById.get(entry.params.publisher) ||
+                    "unknown",
+                sourcePublisherOrigin: entry.props.source
+                    ? publisherOriginById.get(
+                          bookRouteParams(entry.props.source.id).publisher,
+                      )
+                    : undefined,
+            },
+        }),
+    );
+}
+const { book, source, isLegacy } = Astro.props;
+if (isLegacy) return Astro.redirect(getRelativeLocaleUrl("en", book.id), 301);
+---
+
+<BookDetail
+    locale="en"
+    book={book}
+    source={source}
+    publisherName={Astro.props.publisherName}
+    publisherOrigin={Astro.props.publisherOrigin}
+    sourcePublisherOrigin={Astro.props.sourcePublisherOrigin}
+/>

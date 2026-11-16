@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="640" viewBox="0 0 480 640">
+  <rect width="480" height="640" fill="#274a43"/>
+  <rect x="28" y="28" width="424" height="584" fill="none" stroke="#d5d8b8" stroke-width="2"/>
+  <circle cx="240" cy="250" r="120" fill="#e3b67d"/>
+  <path d="M0 400 Q120 360 240 400 T480 400 V640 H0Z" fill="#365f58"/>
+  <path d="M0 456 Q120 418 240 456 T480 456 V640 H0Z" fill="#1d3b38"/>
+  <path d="M204 381 L218 253 H262 L276 381Z" fill="#f0e9ce"/>
+  <path d="M210 253 L240 220 L270 253Z" fill="#b6624d"/>
+  <rect x="225" y="273" width="30" height="30" fill="#e3b67d"/>
+  <path d="M190 382 H290" stroke="#f0e9ce" stroke-width="8"/>
+  <text x="240" y="96" text-anchor="middle" fill="#f0e9ce" font-family="serif" font-size="36">燈塔來信</text>
+  <text x="240" y="550" text-anchor="middle" fill="#d5d8b8" font-family="sans-serif" font-size="15" letter-spacing="3">FICTIONAL DEMO · VOL. 05</text>
+</svg>

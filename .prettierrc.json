@@ -1,0 +1,25 @@
+{
+  "plugins": ["prettier-plugin-astro", "prettier-plugin-brace-style"],
+  "braceStyle": "allman",
+  "tabWidth": 2,
+  "overrides": [
+    {
+      "files": ["*.json"],
+      "options": {
+        "braceStyle": "1tbs"
+      }
+    },
+    {
+      "files": ["*.ts", "*.astro", "*.mjs"],
+      "options": {
+        "tabWidth": 4
+      }
+    },
+    {
+      "files": ["*.css"],
+      "options": {
+        "tabWidth": 2
+      }
+    }
+  ]
+}

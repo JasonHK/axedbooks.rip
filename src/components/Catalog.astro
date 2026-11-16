@@ -1,0 +1,574 @@
+---
+import { getCollection } from "astro:content";
+import { useI18n } from "@ariaskit/astro-i18n";
+import {
+    ArrowDownUp,
+    ArrowRight,
+    BookOpen,
+    ChevronLeft,
+    ChevronRight,
+    LayoutGrid,
+    List,
+    Search,
+    SlidersHorizontal,
+    X,
+} from "@lucide/astro";
+import Layout from "../layouts/Layout.astro";
+import {
+    bookRouteParams,
+    bookStatus,
+    catalogBooks,
+    latestVolume,
+    sourceBookId,
+    validateBooks,
+    volumeGap,
+} from "../lib/catalog";
+import {
+    formatDate,
+    formatCountry,
+    formatAuthors,
+    formatLabel,
+    formatLanguage,
+    gapLabel,
+    localePath,
+    type Locale,
+} from "../lib/i18n";
+import type { BookStatus } from "../lib/catalog";
+interface Props {
+    locale: Locale;
+}
+const { locale } = Astro.props;
+const i18n = useI18n(
+    { locals: { ...Astro.locals }, url: Astro.url },
+    { locale },
+);
+const { t: translate, plural } = i18n;
+const [allBooks, publishers] = await Promise.all([
+    getCollection("books"),
+    getCollection("publishers"),
+]);
+const publisherById = new Map(
+    publishers.map((publisher) => [publisher.id, publisher.data.name]),
+);
+const publisherOriginById = new Map(
+    publishers.map((publisher) => [publisher.id, publisher.data.origin]),
+);
+const byId = validateBooks(allBooks, new Set(publisherById.keys()));
+const publisherName = (book: (typeof allBooks)[number]) =>
+    publisherById.get(bookRouteParams(book.id).publisher) ||
+    bookRouteParams(book.id).publisher;
+const statusLabels = {
+    releasing: "statusReleasing",
+    hiatus: "statusHiatus",
+    cancelled: "statusCancelled",
+    finished: "statusFinished",
+} as const;
+const statusColors: Record<BookStatus, string> = {
+    releasing: "badge-success",
+    hiatus: "badge-warning",
+    cancelled: "badge-error",
+    finished: "badge-neutral",
+};
+const books = catalogBooks(allBooks).sort(
+    (a, b) =>
+        b.data.lastPublishedDate.valueOf() -
+            a.data.lastPublishedDate.valueOf() || a.id.localeCompare(b.id),
+);
+const values = (
+    key: "publisher" | "format" | "origin" | "language" | "status",
+) => {
+    if (key === "publisher")
+        return [
+            ...new Set(books.map((book) => bookRouteParams(book.id).publisher)),
+        ].sort((a, b) =>
+            (publisherById.get(a) || a).localeCompare(
+                publisherById.get(b) || b,
+            ),
+        );
+    if (key === "format")
+        return [
+            ...new Set(books.map((book) => bookRouteParams(book.id).type)),
+        ].sort();
+    if (key === "status") return Object.keys(statusLabels) as BookStatus[];
+    if (key === "origin")
+        return [
+            ...new Set(
+                books.map(
+                    (book) =>
+                        publisherOriginById.get(
+                            bookRouteParams(book.id).publisher,
+                        ) || "unknown",
+                ),
+            ),
+        ].sort();
+    return [
+        ...new Set(books.map((book) => book.data[key] || "unknown")),
+    ].sort();
+};
+const coverStyles = [
+    "bg-secondary text-secondary-content",
+    "bg-primary text-primary-content",
+    "bg-neutral text-neutral-content",
+];
+---
+
+<Layout locale={locale}>
+    <section class="border-b border-base-300 bg-base-200">
+        <div class="mx-auto max-w-[1312px] px-4 py-10 sm:px-6 lg:px-9 lg:py-12">
+            <p class="text-xs font-semibold text-primary">
+                {translate("eyebrow")}
+            </p>
+            <h1 class="mt-3 font-serif text-3xl font-bold text-base-content sm:text-4xl">
+                {translate("title")}
+            </h1>
+            <p class="mt-3 max-w-2xl text-sm leading-6 text-base-content/70">
+                {translate("intro")}
+            </p>
+        </div>
+    </section>
+    <section
+        class="mx-auto max-w-[1312px] px-4 py-10 sm:px-6 lg:px-9 lg:py-14"
+        aria-labelledby="catalog-title"
+    >
+        <div class="mb-6">
+            <h2 id="catalog-title" class="font-serif text-2xl font-bold">
+                {translate("catalogTitle")}
+            </h2>
+            <p class="mt-2 text-sm text-base-content/70">
+                {translate("catalogDesc")}
+            </p>
+        </div>
+        {books.some((book) => book.data.fictional) && (
+            <div
+                role="alert"
+                class="alert alert-warning alert-soft notice text-sm"
+            >
+                <BookOpen size={18} aria-hidden="true" />
+                <div>
+                    <strong>{translate("fiction")}</strong>
+                    <p>{translate("fictionNotice")}</p>
+                </div>
+            </div>
+        )}
+        <p id="no-js" class="mt-4 text-sm text-base-content/70">
+            {translate("noJs")}
+        </p>
+        <div id="catalog-app" data-locale={locale}>
+            <div class="toolbar my-6 flex flex-col gap-3 lg:flex-row" hidden>
+                <label class="input search-box w-full min-w-0 lg:flex-1">
+                    <Search size={18} aria-hidden="true" />
+                    <span class="sr-only">{translate("searchLabel")}</span>
+                    <input
+                        id="search"
+                        class="min-w-0 text-xs sm:text-sm"
+                        type="search"
+                        placeholder={translate("search")}
+                        autocomplete="off"
+                    />
+                </label>
+                <div class="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                    <label class="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+                        <ArrowDownUp size={16} aria-hidden="true" />
+                        <span class="sr-only">{translate("sort")}</span>
+                        <select
+                            id="sort"
+                            class="select select-sm w-full sm:w-auto"
+                        >
+                            <option value="date-desc">
+                                {translate("newest")}
+                            </option>
+                            <option value="date-asc">
+                                {translate("oldest")}
+                            </option>
+                            <option value="title-asc">
+                                {translate("titleAsc")}
+                            </option>
+                            <option value="title-desc">
+                                {translate("titleDesc")}
+                            </option>
+                            <option value="volume-desc">
+                                {translate("volumeDesc")}
+                            </option>
+                            <option value="volume-asc">
+                                {translate("volumeAsc")}
+                            </option>
+                            <option value="gap-desc">
+                                {translate("gapDesc")}
+                            </option>
+                            <option value="gap-asc">
+                                {translate("gapAsc")}
+                            </option>
+                        </select>
+                    </label>
+                    <div
+                        class="join ml-auto"
+                        role="group"
+                        aria-label={translate("display")}
+                    >
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-square join-item view-button btn-active"
+                            data-view="grid"
+                            aria-label={translate("grid")}
+                            title={translate("grid")}
+                            aria-pressed="true"
+                        >
+                            <LayoutGrid size={17} />
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-square join-item view-button"
+                            data-view="list"
+                            aria-label={translate("list")}
+                            title={translate("list")}
+                            aria-pressed="false"
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex flex-col gap-6 min-[901px]:flex-row">
+                <aside
+                    class="filter-panel grid grid-cols-2 gap-x-3 min-[901px]:block min-[901px]:w-48 min-[901px]:shrink-0"
+                    hidden
+                >
+                    <div class="col-span-2 flex items-center justify-between border-b border-base-300 py-3">
+                        <span class="flex items-center gap-2 text-sm font-semibold">
+                            <SlidersHorizontal size={16} />{" "}
+                            {translate("filters")}
+                        </span>
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-xs reset-button"
+                        >
+                            {translate("clear")}
+                        </button>
+                    </div>
+                    {(
+                        [
+                            ["format", translate("format")],
+                            ["status", translate("statusFilter")],
+                            ["origin", translate("origin")],
+                            ["publisher", translate("publisher")],
+                            ["language", translate("bookLanguage")],
+                        ] as const
+                    ).map(([key, label]) => (
+                        <fieldset class="fieldset border-b border-base-300 py-3">
+                            <legend class="fieldset-legend">{label}</legend>
+                            <label class="sr-only" for={`filter-${key}`}>
+                                {label}
+                            </label>
+                            <select
+                                id={`filter-${key}`}
+                                class="select select-sm w-full"
+                                data-filter={key}
+                            >
+                                <option value="">{translate("all")}</option>
+                                {values(key).map((value) => (
+                                    <option value={value}>
+                                        {key === "status"
+                                            ? translate(
+                                                  statusLabels[
+                                                      value as BookStatus
+                                                  ],
+                                              )
+                                            : key === "publisher"
+                                              ? publisherById.get(value) ||
+                                                value
+                                              : key === "origin"
+                                                ? value === "unknown"
+                                                    ? translate("unknown")
+                                                    : formatCountry(
+                                                          value,
+                                                          locale,
+                                                      )
+                                                : key === "format"
+                                                  ? formatLabel(
+                                                        value,
+                                                        translate,
+                                                    )
+                                                  : value === "unknown"
+                                                    ? translate("unknown")
+                                                    : key === "language"
+                                                      ? formatLanguage(
+                                                            value,
+                                                            locale,
+                                                        )
+                                                      : value}
+                                    </option>
+                                ))}
+                            </select>
+                        </fieldset>
+                    ))}
+                </aside>
+                <div class="min-w-0 flex-1">
+                    <div class="flex min-h-12 items-center justify-between border-y border-base-300 text-sm text-base-content/70">
+                        <span>
+                            <strong id="result-count" class="text-base-content">
+                                {books.length}
+                            </strong>{" "}
+                            {translate("results")}
+                        </span>
+                        <span class="hidden text-xs sm:inline">
+                            <span id="result-range">
+                                {books.length
+                                    ? `01—${String(books.length).padStart(2, "0")}`
+                                    : "00—00"}
+                            </span>
+                        </span>
+                    </div>
+                    <div
+                        id="book-list"
+                        class="book-grid grid grid-cols-2 gap-x-3 gap-y-8 pt-6 sm:gap-x-5 min-[901px]:grid-cols-3 min-[1201px]:grid-cols-4"
+                    >
+                        {books.map((book, index) => {
+                            const sourceId = sourceBookId(book);
+                            const source = sourceId
+                                ? byId.get(sourceId)
+                                : undefined;
+                            const gap = volumeGap(book, source);
+                            const status = bookStatus(book, source);
+                            const volume = latestVolume(book);
+                            const displayVolume =
+                                typeof volume === "number"
+                                    ? translate("numberedVolume", { volume })
+                                    : volume;
+                            const format = bookRouteParams(book.id).type;
+                            const publisher = publisherName(book);
+                            const origin =
+                                publisherOriginById.get(
+                                    bookRouteParams(book.id).publisher,
+                                ) || "unknown";
+                            return (
+                                <article
+                                    class="card card-sm book-card min-w-0"
+                                    data-id={book.id}
+                                    data-title={book.data.title}
+                                    data-search={[
+                                        book.data.title,
+                                        publisher,
+                                        ...book.data.authors,
+                                        source?.data.title || "",
+                                    ].join(" ")}
+                                    data-publisher={
+                                        bookRouteParams(book.id).publisher
+                                    }
+                                    data-format={format}
+                                    data-origin={origin}
+                                    data-status={status}
+                                    data-language={book.data.language}
+                                    data-date={book.data.lastPublishedDate
+                                        .toISOString()
+                                        .slice(0, 10)}
+                                    data-volume={volume}
+                                    data-gap={gap ?? ""}
+                                >
+                                    <a
+                                        class:list={[
+                                            "book-cover relative flex aspect-[2/3] w-full flex-col justify-between self-start overflow-hidden rounded-box p-3 sm:p-4",
+                                            coverStyles[
+                                                index % coverStyles.length
+                                            ],
+                                        ]}
+                                        href={localePath(locale, `${book.id}/`)}
+                                        aria-label={`${translate("details")}: ${book.data.title}`}
+                                    >
+                                        {book.data.cover ? (
+                                            <img
+                                                class="absolute inset-0 h-full w-full bg-base-300 object-contain"
+                                                src={book.data.cover}
+                                                alt=""
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <>
+                                                <span class="text-[10px] font-semibold">
+                                                    AXED BOOKS /{" "}
+                                                    {String(index + 1).padStart(
+                                                        2,
+                                                        "0",
+                                                    )}
+                                                </span>
+                                                <span class="line-clamp-4 break-words font-serif text-sm font-bold sm:text-lg">
+                                                    {book.data.title}
+                                                </span>
+                                                <span class="flex justify-between gap-2 text-[10px]">
+                                                    <span>
+                                                        {formatLabel(
+                                                            format,
+                                                            translate,
+                                                        )}
+                                                    </span>
+                                                    <span>{displayVolume}</span>
+                                                </span>
+                                            </>
+                                        )}
+                                    </a>
+                                    <div class="card-body book-info mt-3 min-w-0 gap-2 p-0">
+                                        <div class="book-tags flex flex-wrap gap-1">
+                                            <span
+                                                class:list={[
+                                                    "badge badge-soft badge-sm status-badge",
+                                                    statusColors[status],
+                                                ]}
+                                            >
+                                                {translate(
+                                                    statusLabels[status],
+                                                )}
+                                            </span>
+                                            <span class="badge badge-soft badge-secondary badge-sm">
+                                                {formatLabel(format, translate)}
+                                            </span>
+                                            <span class="badge badge-soft badge-primary badge-sm">
+                                                {origin === "unknown"
+                                                    ? translate("unknown")
+                                                    : formatCountry(
+                                                          origin,
+                                                          locale,
+                                                      )}
+                                            </span>
+                                            {book.data.fictional && (
+                                                <span class="badge badge-soft badge-warning badge-sm">
+                                                    {translate("fiction")}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <h3 class="card-title break-words font-serif text-base">
+                                            <a
+                                                class="link link-hover"
+                                                href={localePath(
+                                                    locale,
+                                                    `${book.id}/`,
+                                                )}
+                                            >
+                                                {book.data.title}
+                                            </a>
+                                        </h3>
+                                        <p class="text-xs text-base-content/70">
+                                            {formatAuthors(
+                                                book.data.authors,
+                                                locale,
+                                            )}
+                                        </p>
+                                        <div class="flex flex-wrap justify-between gap-1 text-xs text-base-content/70">
+                                            <span>{publisher}</span>
+                                            <span>
+                                                {formatDate(
+                                                    book.data.lastPublishedDate,
+                                                    locale,
+                                                )}
+                                            </span>
+                                        </div>
+                                        <div class="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 border-t border-base-300 text-xs sm:flex">
+                                            <div class="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                                                <span>
+                                                    <strong class="text-base-content">
+                                                        {displayVolume}
+                                                    </strong>
+                                                </span>
+                                                {gap !== undefined &&
+                                                    gap !== 0 && (
+                                                        <span class="text-primary">
+                                                            {gapLabel(
+                                                                gap,
+                                                                translate,
+                                                                plural,
+                                                            )}
+                                                        </span>
+                                                    )}
+                                            </div>
+                                            <a
+                                                class="btn btn-ghost btn-square btn-xs sm:ml-auto"
+                                                href={localePath(
+                                                    locale,
+                                                    `${book.id}/`,
+                                                )}
+                                                aria-label={`${translate("details")}: ${book.data.title}`}
+                                            >
+                                                <ArrowRight size={16} />
+                                            </a>
+                                        </div>
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                    <div
+                        id="no-results"
+                        class="py-16 text-center"
+                        hidden={books.length > 0}
+                    >
+                        <Search
+                            class="mx-auto text-base-content/60"
+                            size={24}
+                        />
+                        <h3 class="mt-3 font-semibold">
+                            {books.length
+                                ? translate("noResults")
+                                : translate("empty")}
+                        </h3>
+                        {books.length > 0 && (
+                            <>
+                                <p class="mt-2 text-sm text-base-content/70">
+                                    {translate("noResultsHint")}
+                                </p>
+                                <button
+                                    class="btn btn-ghost btn-sm reset-button mt-4"
+                                    type="button"
+                                >
+                                    <X size={15} /> {translate("reset")}
+                                </button>
+                            </>
+                        )}
+                    </div>
+                    <nav
+                        id="pagination"
+                        class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-5 text-sm"
+                        aria-label={translate("pagination")}
+                        data-page-status={i18n.raw<string>("pageStatus")}
+                        hidden
+                    >
+                        <label class="flex items-center gap-2">
+                            {translate("perPage")}
+                            <select
+                                id="page-size"
+                                class="select select-sm w-auto"
+                            >
+                                <option value="12">12</option>
+                                <option value="24">24</option>
+                                <option value="36">36</option>
+                            </select>
+                        </label>
+                        <div class="join">
+                            <button
+                                id="previous-page"
+                                class="btn btn-square btn-sm join-item"
+                                type="button"
+                                aria-label={translate("previousPage")}
+                                title={translate("previousPage")}
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+                            <span
+                                id="page-status"
+                                class="join-item flex min-w-24 items-center justify-center bg-base-200 px-3 text-xs"
+                                aria-live="polite"
+                            ></span>
+                            <button
+                                id="next-page"
+                                class="btn btn-square btn-sm join-item"
+                                type="button"
+                                aria-label={translate("nextPage")}
+                                title={translate("nextPage")}
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </section>
+</Layout>
+<script src="../scripts/catalog.ts"></script>
