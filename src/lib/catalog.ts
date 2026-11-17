@@ -163,7 +163,7 @@ export function catalogIndexBooks<Entry extends Book>(
     }
     return indexed.sort(
         (a, b) =>
-            a.lastPublishedDate.localeCompare(b.lastPublishedDate) ||
+            b.lastPublishedDate.localeCompare(a.lastPublishedDate) ||
             a.id.localeCompare(b.id),
     );
 }

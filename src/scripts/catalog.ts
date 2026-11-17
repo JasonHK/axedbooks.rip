@@ -242,7 +242,7 @@ if (app)
         ];
         for (const key of queryKeys) url.searchParams.delete(key);
         if (search.value.trim()) url.searchParams.set("q", search.value.trim());
-        if (sort.value !== "date-asc") url.searchParams.set("sort", sort.value);
+        if (sort.value !== "date-desc") url.searchParams.set("sort", sort.value);
         if (view !== "grid") url.searchParams.set("view", view);
         if (pageSize.value !== "12")
             url.searchParams.set("perPage", pageSize.value);
@@ -258,8 +258,8 @@ if (app)
     {
         const params = new URLSearchParams(location.search);
         search.value = params.get("q") || "";
-        const sortValue = params.get("sort") || "date-asc";
-        sort.value = allowedSorts.has(sortValue) ? sortValue : "date-asc";
+        const sortValue = params.get("sort") || "date-desc";
+        sort.value = allowedSorts.has(sortValue) ? sortValue : "date-desc";
         for (const filter of filters)
         {
             const key = filter.dataset.filter!;
@@ -299,8 +299,13 @@ if (app)
         });
         const sorted = [...books].sort((left, right) =>
         {
-            const leftValue = String(left[field as keyof CatalogBook] || "");
-            const rightValue = String(right[field as keyof CatalogBook] || "");
+            const sortField = field === "date" ? "lastPublishedDate" : field;
+            const leftValue = String(
+                left[sortField as keyof CatalogBook] || "",
+            );
+            const rightValue = String(
+                right[sortField as keyof CatalogBook] || "",
+            );
             if (!leftValue || !rightValue)
                 return (
                     (!leftValue && !rightValue ? 0 : !leftValue ? 1 : -1) ||
@@ -448,7 +453,7 @@ if (app)
         button.addEventListener("click", () =>
         {
             search.value = "";
-            sort.value = "date-asc";
+            sort.value = "date-desc";
             page = 1;
             for (const filter of filters) filter.value = "";
             render();

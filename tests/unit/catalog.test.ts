@@ -159,7 +159,7 @@ it("keeps independent root books in the catalog but hides referenced sources", (
     ]);
 });
 
-it("creates an axed-only, oldest-first catalog index", () =>
+it("creates an axed-only, newest-first catalog index", () =>
 {
     const publishers = [
         { id: "original-publisher", data: { name: "Original", origin: "JP" } },
@@ -180,27 +180,38 @@ it("creates an axed-only, oldest-first catalog index", () =>
             lastPublishedDate: new Date("2020-01-01T00:00:00Z"),
         },
     };
+    const newerBook = {
+        ...root,
+        id: "independent-publisher/manga/newer",
+        data: {
+            ...root.data,
+            status: "axed" as const,
+            lastPublishedDate: new Date("2023-01-01T00:00:00Z"),
+        },
+    };
     const ongoingBook = {
         ...root,
         id: "independent-publisher/manga/ongoing",
     };
 
     const index = catalogIndexBooks(
-        [axedSource, oldTranslation, ongoingBook],
+        [axedSource, oldTranslation, newerBook, ongoingBook],
         publishers,
     );
-    expect(index).toMatchObject([
-        {
-            id: oldTranslation.id,
-            publisherName: "Local",
-            origin: "TW",
-            format: "manga",
-            status: "axed",
-            statusEstimated: true,
-            gap: 6,
-            sourceTitle: "Original",
-        },
+    expect(index.map((book) => book.id)).toStrictEqual([
+        newerBook.id,
+        oldTranslation.id,
     ]);
+    expect(index.find((book) => book.id === oldTranslation.id)).toMatchObject({
+        id: oldTranslation.id,
+        publisherName: "Local",
+        origin: "TW",
+        format: "manga",
+        status: "axed",
+        statusEstimated: true,
+        gap: 6,
+        sourceTitle: "Original",
+    });
     expect(index.map((book) => book.id)).not.toContain(axedSource.id);
     expect(index.map((book) => book.id)).not.toContain(ongoingBook.id);
 });

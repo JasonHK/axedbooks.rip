@@ -162,10 +162,10 @@ const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
                             id="sort"
                             class="select select-sm w-full sm:w-auto"
                         >
-                            <option value="date-desc">
+                            <option value="date-desc" selected>
                                 {translate("newest")}
                             </option>
-                            <option value="date-asc" selected>
+                            <option value="date-asc">
                                 {translate("oldest")}
                             </option>
                             <option value="title-asc">
