@@ -18,7 +18,7 @@
     "catalog": "Catalog",
     "about": "About",
     "catalogTitle": "Publication Tracker",
-    "catalogDesc": "Review each translated edition's latest publication date, axed status, and volume gap.",
+    "catalogDesc": "Review each translated edition's latest publication date, publication status, and volume gap.",
     "fiction": "Demo data",
     "fictionNotice": "Books marked as demo data are fictional examples, not real publishing records.",
     "search": "Search titles, authors, or publishers",

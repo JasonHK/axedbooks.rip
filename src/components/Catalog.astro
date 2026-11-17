@@ -14,7 +14,11 @@ import {
     X,
 } from "@lucide/astro";
 import Layout from "../layouts/Layout.astro";
-import { CATALOG_PAGE_SIZE, catalogIndexBooks } from "../lib/catalog";
+import {
+    CATALOG_PAGE_SIZE,
+    catalogIndexBooks,
+    type BookStatus,
+} from "../lib/catalog";
 import {
     formatDate,
     formatCountry,
@@ -29,8 +33,9 @@ import {
 interface Props {
     locale: Locale;
     page?: number;
+    status?: BookStatus;
 }
-const { locale, page = 1 } = Astro.props;
+const { locale, page = 1, status = "axed" } = Astro.props;
 const i18n = useI18n(
     { locals: { ...Astro.locals }, url: Astro.url },
     { locale },
@@ -45,7 +50,21 @@ const [allBooks, publishers] = await Promise.all([
 const publisherById = new Map(
     publishers.map((publisher) => [publisher.id, publisher.data.name]),
 );
-const books = catalogIndexBooks(allBooks, publishers);
+const statusLabels = {
+    ongoing: translate("statusOngoing"),
+    hiatus: translate("statusHiatus"),
+    axed: translate("statusAxed"),
+    finished: translate("statusFinished"),
+};
+const statusBadgeColors = {
+    ongoing: "badge-success",
+    hiatus: "badge-warning",
+    axed: "badge-error",
+    finished: "badge-neutral",
+};
+const books = catalogIndexBooks(allBooks, publishers).filter(
+    (book) => book.status === status,
+);
 const pageCount = Math.max(1, Math.ceil(books.length / CATALOG_PAGE_SIZE));
 const currentPage = Math.min(Math.max(page, 1), pageCount);
 const pageBooks = books.slice(
@@ -71,10 +90,20 @@ const coverStyles = [
     "bg-primary text-primary-content",
     "bg-neutral text-neutral-content",
 ];
-const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
+const pagePath = (value: number) =>
+    `${status === "axed" ? "" : `${status}/`}${value === 1 ? "" : `page/${value}/`}`;
+const categories = [
+    { status: "axed", label: statusLabels.axed, path: "" },
+    { status: "hiatus", label: statusLabels.hiatus, path: "hiatus/" },
+    { status: "ongoing", label: statusLabels.ongoing, path: "ongoing/" },
+    { status: "finished", label: statusLabels.finished, path: "finished/" },
+] as const;
 ---
 
-<Layout locale={locale} path={pagePath(currentPage)}>
+<Layout
+    locale={locale}
+    path={pagePath(currentPage)}
+>
     <section class="border-b border-base-300 bg-base-200">
         <div class="mx-auto max-w-[1312px] px-4 py-10 sm:px-6 lg:px-9 lg:py-12">
             <h1 class="font-serif text-3xl font-bold text-base-content sm:text-4xl">
@@ -96,6 +125,28 @@ const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
             <p class="mt-2 text-sm text-base-content/70">
                 {translate("catalogDesc")}
             </p>
+            <nav
+                class="tabs tabs-border mt-4 flex-wrap"
+                role="tablist"
+                aria-label={translate("catalog")}
+            >
+                {categories.map((category) => (
+                    <a
+                        class:list={[
+                            "tab",
+                            { "tab-active": status === category.status },
+                        ]}
+                        role="tab"
+                        aria-selected={status === category.status}
+                        aria-current={
+                            status === category.status ? "page" : undefined
+                        }
+                        href={localePath(locale, category.path)}
+                    >
+                        {category.label}
+                    </a>
+                ))}
+            </nav>
         </div>
         {books.some((book) => book.fictional) && (
             <div
@@ -124,11 +175,15 @@ const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
             id="catalog-app"
             data-locale={htmlLang(locale)}
             data-locale-route={locale}
+            data-status={status}
             data-page={currentPage}
-            data-page-root={localePath(locale)}
+            data-page-root={localePath(
+                locale,
+                status === "axed" ? "" : `${status}/`,
+            )}
             data-catalog-url="/catalog.json"
             data-page-status={i18n.raw<string>("pageStatus")}
-            data-axed-label={translate("statusAxed")}
+            data-status-labels={JSON.stringify(statusLabels)}
             data-details-label={translate("details")}
             data-fiction-label={translate("fiction")}
             data-format-manga={translate("manga")}
@@ -368,8 +423,13 @@ const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
                                     </a>
                                     <div class="card-body book-info mt-3 min-w-0 gap-2 p-0">
                                         <div class="book-tags flex flex-wrap gap-1">
-                                            <span class="badge badge-soft badge-error badge-sm status-badge">
-                                                {translate("statusAxed")}
+                                            <span
+                                                class:list={[
+                                                    "badge badge-soft badge-sm status-badge",
+                                                    statusBadgeColors[status],
+                                                ]}
+                                            >
+                                                {statusLabels[book.status]}
                                             </span>
                                             <span class="badge badge-soft badge-secondary badge-sm">
                                                 {formatLabel(format, translate)}
@@ -484,7 +544,10 @@ const pagePath = (value: number) => (value === 1 ? "" : `page/${value}/`);
                             <div class="card-body book-info mt-3 min-w-0 gap-2 p-0">
                                 <div class="book-tags flex flex-wrap gap-1">
                                     <span
-                                        class="badge badge-soft badge-error badge-sm status-badge"
+                                        class:list={[
+                                            "badge badge-soft badge-sm status-badge",
+                                            statusBadgeColors[status],
+                                        ]}
                                         data-card-status
                                     ></span>
                                     <span

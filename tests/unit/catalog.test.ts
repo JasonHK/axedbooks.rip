@@ -159,7 +159,7 @@ it("keeps independent root books in the catalog but hides referenced sources", (
     ]);
 });
 
-it("creates an axed-only, newest-first catalog index", () =>
+it("creates an all-status, newest-first catalog index", () =>
 {
     const publishers = [
         { id: "original-publisher", data: { name: "Original", origin: "JP" } },
@@ -192,15 +192,44 @@ it("creates an axed-only, newest-first catalog index", () =>
     const ongoingBook = {
         ...root,
         id: "independent-publisher/manga/ongoing",
+        data: { ...root.data, status: "ongoing" as const },
+    };
+    const hiatusBook = {
+        ...root,
+        id: "independent-publisher/manga/hiatus",
+        data: {
+            ...root.data,
+            status: "hiatus" as const,
+            lastPublishedDate: new Date("2022-01-01T00:00:00Z"),
+        },
+    };
+    const finishedBook = {
+        ...root,
+        id: "independent-publisher/manga/finished",
+        data: {
+            ...root.data,
+            status: "finished" as const,
+            lastPublishedDate: new Date("2021-01-01T00:00:00Z"),
+        },
     };
 
     const index = catalogIndexBooks(
-        [axedSource, oldTranslation, newerBook, ongoingBook],
+        [axedSource, oldTranslation, newerBook, ongoingBook, hiatusBook, finishedBook],
         publishers,
     );
     expect(index.map((book) => book.id)).toStrictEqual([
+        ongoingBook.id,
         newerBook.id,
+        hiatusBook.id,
+        finishedBook.id,
         oldTranslation.id,
+    ]);
+    expect(index.map((book) => book.status)).toStrictEqual([
+        "ongoing",
+        "axed",
+        "hiatus",
+        "finished",
+        "axed",
     ]);
     expect(index.find((book) => book.id === oldTranslation.id)).toMatchObject({
         id: oldTranslation.id,
@@ -213,7 +242,6 @@ it("creates an axed-only, newest-first catalog index", () =>
         sourceTitle: "Original",
     });
     expect(index.map((book) => book.id)).not.toContain(axedSource.id);
-    expect(index.map((book) => book.id)).not.toContain(ongoingBook.id);
 });
 
 it("generates only numbered routes after the first page", () =>

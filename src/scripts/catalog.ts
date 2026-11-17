@@ -1,4 +1,4 @@
-import { normalize } from "../lib/catalog";
+import { normalize, type BookStatus } from "../lib/catalog";
 import { createTranslator } from "@ariaskit/astro-i18n";
 
 interface CatalogBook
@@ -14,7 +14,7 @@ interface CatalogBook
     lastPublishedDate: string;
     volume: number | string;
     gap?: number;
-    status: "axed";
+    status: BookStatus;
     statusEstimated: boolean;
     sourceTitle?: string;
     cover?: string;
@@ -41,6 +41,10 @@ if (app)
         locale: app.dataset.locale || "en",
         translations: { pageStatus: pagination.dataset.pageStatus },
     });
+    const status = (app.dataset.status || "axed") as BookStatus;
+    const statusLabels = JSON.parse(
+        app.dataset.statusLabels || "{}",
+    ) as Record<BookStatus, string>;
     const pageSize = app.querySelector<HTMLSelectElement>("#page-size")!;
     const pageStatus = app.querySelector<HTMLElement>("#page-status")!;
     const previous = app.querySelector<HTMLAnchorElement>("#previous-page")!;
@@ -162,7 +166,7 @@ if (app)
         card.dataset.publisher = book.publisherId;
         card.dataset.format = book.format;
         card.dataset.origin = book.origin;
-        card.dataset.status = "axed";
+        card.dataset.status = book.status;
         card.dataset.language = book.language;
         card.dataset.date = book.lastPublishedDate.slice(0, 10);
         card.dataset.volume = String(book.volume);
@@ -212,7 +216,11 @@ if (app)
             "[data-card-title]",
         ))
             target.textContent = title;
-        setText(card, "[data-card-status]", app!.dataset.axedLabel || "Axed");
+        setText(
+            card,
+            "[data-card-status]",
+            statusLabels[book.status] || book.status,
+        );
         setText(card, "[data-card-format]", displayFormat);
         setText(card, "[data-card-origin]", origin);
         setText(card, "[data-card-fiction]", app!.dataset.fictionLabel || "");
@@ -406,7 +414,7 @@ if (app)
         const catalog = (await response.json()) as CatalogBook[];
         if (!Array.isArray(catalog))
             throw new Error("Catalog index must be an array");
-        books = catalog;
+        books = catalog.filter((book) => book.status === status);
         readUrl();
         render();
         updateUrl();

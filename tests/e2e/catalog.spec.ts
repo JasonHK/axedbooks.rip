@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import type { BookStatus } from "../../src/lib/catalog";
 
 const bookPath = "ching-win/light-novel/her-royal-highness-seems-to-be-angry";
 const mangaPath = "jade-dynasty/manga/ruri-dragon";
@@ -6,7 +7,11 @@ const bookTitle = "公主殿下貌似大發雷霆";
 const bookCover =
     "/covers/ching-win/light-novel/her-royal-highness-seems-to-be-angry.jpg";
 
-async function mockCatalog(page: Page, count: number)
+async function mockCatalog(
+    page: Page,
+    count: number,
+    statuses: readonly BookStatus[] = ["axed"],
+)
 {
     await page.route("**/catalog.json", (route) =>
         route.fulfill({
@@ -37,7 +42,7 @@ async function mockCatalog(page: Page, count: number)
                     ).toISOString(),
                     volume: index + 1,
                     gap: index % 4,
-                    status: "axed",
+                    status: statuses[index % statuses.length],
                     statusEstimated: index % 2 === 0,
                     sourceTitle:
                         index === 0 ? "王女殿下はお怒りのようです" : undefined,
@@ -182,6 +187,93 @@ test("pagination handles page sizes, filters, URL state and history", async ({
     await expect(page).toHaveURL(/\/en\/$/);
 });
 
+test("localized status catalogs isolate books and keep scoped page links", async ({
+    page,
+}) =>
+{
+    await mockCatalog(page, 52, ["ongoing", "hiatus", "finished", "axed"]);
+    for (const [path, status, label, badgeColor, title, description] of [
+        [
+            "/en/ongoing/",
+            "ongoing",
+            "Ongoing",
+            "badge-success",
+            "Publication Tracker",
+            "Review each translated edition's latest publication date, publication status, and volume gap.",
+        ],
+        [
+            "/zh-hant/hiatus/",
+            "hiatus",
+            "暫停出版",
+            "badge-warning",
+            "出版追蹤清單",
+            "檢視各代理版本的最新出版日期、出版狀態與集數落差。",
+        ],
+        [
+            "/zh-hans/finished/",
+            "finished",
+            "已完结",
+            "badge-neutral",
+            "出版追踪清单",
+            "查看各代理版本的最新出版日期、出版状态与集数差距。",
+        ],
+    ])
+    {
+        await page.goto(path);
+        await expect(page.locator("#catalog-app")).toHaveAttribute(
+            "data-status",
+            status,
+        );
+        await expect(page.locator("#catalog-title")).toHaveText(title);
+        await expect(page.getByText(description, { exact: true })).toBeVisible();
+        await expect(page).toHaveTitle(`Axed Books | ${title}`);
+        await expect(page.locator(".book-card:visible")).toHaveCount(12);
+        await expect(page.locator("#result-count")).toHaveText("13");
+        await expect(page.locator(".status-badge").first()).toHaveText(label);
+        await expect(page.locator(".status-badge").first()).toHaveClass(
+            new RegExp(badgeColor),
+        );
+        const cardStatuses = await page
+            .locator(".book-card:visible")
+            .evaluateAll((cards) =>
+                cards.map((card) => card.getAttribute("data-status")),
+            );
+        expect(cardStatuses.every((cardStatus) => cardStatus === status)).toBe(
+            true,
+        );
+    }
+
+    await page.goto("/en/ongoing/");
+    await expect(page.getByRole("tablist").getByRole("tab")).toHaveText([
+        "Axed",
+        "Hiatus",
+        "Ongoing",
+        "Finished",
+    ]);
+    await expect(page.locator("#next-page")).toHaveAttribute(
+        "href",
+        "/en/ongoing/page/2/",
+    );
+    await page.locator("#language-menu summary").click();
+    await page.getByRole("link", { name: "繁體中文" }).click();
+    await expect(page).toHaveURL(/\/zh-hant\/ongoing\/$/);
+    await page.goto("/en/");
+    await expect(page.locator(".book-card:visible")).toHaveCount(12);
+    await expect(page.locator("#result-count")).toHaveText("13");
+    await expect(page.locator(".status-badge").first()).toHaveText("Axed");
+});
+
+test("status landing routes render an empty state when their feed is empty", async ({
+    page,
+}) =>
+{
+    await mockCatalog(page, 4);
+    await page.goto("/en/finished/");
+    await expect(page).toHaveURL(/\/en\/finished\/$/);
+    await expect(page.locator("#result-count")).toHaveText("0");
+    await expect(page.locator("#no-results")).toBeVisible();
+});
+
 test("locale switching preserves state and detail pages show original comparison", async ({
     page,
 }) =>
@@ -296,7 +388,7 @@ test("all locales have prefixed catalog and book routes", async ({ page }) =>
         await expect(page).toHaveURL(new RegExp(`/${locale}/${bookPath}/`));
         await expect(page.locator("main h1")).toHaveText(bookTitle);
         await expect(page.getByText(original, { exact: true })).toBeVisible();
-        await expect(page.getByText(gap, { exact: true })).toBeVisible();
+        await expect(page.locator("dd").filter({ hasText: gap })).toBeVisible();
     }
 });
 
@@ -329,8 +421,11 @@ test("catalog remains visible without JavaScript", async ({ browser }) =>
     const context = await browser.newContext({ javaScriptEnabled: false });
     const page = await context.newPage();
     await page.goto("/en/");
-    await expect(page.locator(".book-card:visible")).toHaveCount(1);
-    await expect(page.locator('.book-card[data-status="axed"]')).toHaveCount(1);
+    const staticCards = page.locator(".book-card:visible");
+    await expect(staticCards).not.toHaveCount(0);
+    await expect(page.locator('.book-card[data-status="axed"]')).toHaveCount(
+        await staticCards.count(),
+    );
     await expect(page.locator('[data-filter="status"]')).toHaveCount(0);
     await expect(
         page.getByText(
@@ -342,6 +437,17 @@ test("catalog remains visible without JavaScript", async ({ browser }) =>
     await page.getByRole("link", { name: "繁體中文" }).click();
     await expect(page).toHaveURL(/\/zh-hant\/$/);
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
+    await page.goto("/en/ongoing/");
+    await expect(page.locator("#catalog-app")).toHaveAttribute(
+        "data-status",
+        "ongoing",
+    );
+    const statusCards = await page
+        .locator(".book-card")
+        .evaluateAll((cards) =>
+            cards.map((card) => card.getAttribute("data-status")),
+        );
+    expect(statusCards.every((status) => status === "ongoing")).toBe(true);
     await context.close();
 });
 
@@ -353,7 +459,11 @@ test("static cards remain available when the catalog index fails", async ({
         route.fulfill({ status: 500, body: "" }),
     );
     await page.goto("/en/");
-    await expect(page.locator(".book-card:visible")).toHaveCount(1);
+    const staticCards = page.locator(".book-card:visible");
+    await expect(staticCards).not.toHaveCount(0);
+    await expect(page.locator('.book-card[data-status="axed"]')).toHaveCount(
+        await staticCards.count(),
+    );
     await expect(page.locator("#catalog-load-error")).toBeVisible();
     await expect(page.locator(".toolbar")).toBeHidden();
 });

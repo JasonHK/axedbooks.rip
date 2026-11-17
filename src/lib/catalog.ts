@@ -1,4 +1,5 @@
 export type BookStatus = "ongoing" | "hiatus" | "axed" | "finished";
+export const CATALOG_STATUS_PAGES = ["ongoing", "hiatus", "finished"] as const;
 
 export interface BookData
 {
@@ -36,7 +37,7 @@ export interface CatalogIndexBook
     lastPublishedDate: string;
     volume: number | string;
     gap?: number;
-    status: "axed";
+    status: BookStatus;
     statusEstimated: boolean;
     sourceTitle?: string;
     cover?: string;
@@ -138,7 +139,7 @@ export function catalogIndexBooks<Entry extends Book>(
     {
         const sourceId = sourceBookId(book);
         const source = sourceId ? byId.get(sourceId) : undefined;
-        if (bookStatus(book, source, now) !== "axed") continue;
+        const status = bookStatus(book, source, now);
 
         const { publisher, type } = bookRouteParams(book.id);
         const publisherData = publisherById.get(publisher);
@@ -154,7 +155,7 @@ export function catalogIndexBooks<Entry extends Book>(
             lastPublishedDate: book.data.lastPublishedDate.toISOString(),
             volume: latestVolume(book),
             gap: volumeGap(book, source),
-            status: "axed",
+            status,
             statusEstimated: book.data.status === undefined,
             sourceTitle: source?.data.title,
             cover: book.data.cover,
