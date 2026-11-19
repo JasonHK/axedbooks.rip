@@ -416,6 +416,68 @@ test("type-first and unprefixed book URLs redirect to canonical editions", async
     await expect(page).toHaveURL(new RegExp(`/en/${bookPath}/$`));
 });
 
+for (const { width, locale } of [
+    { width: 320, locale: "zh-hant" },
+    { width: 1280, locale: "en" },
+])
+{
+    test(`catalog controls do not shift results while loading at ${width}px`, async ({
+        page,
+    }) =>
+    {
+        await page.setViewportSize({ width, height: 900 });
+        let releaseResponse!: () => void;
+        const responseReady = new Promise<void>((resolve) =>
+        {
+            releaseResponse = resolve;
+        });
+        let requestStarted!: () => void;
+        const requestReady = new Promise<void>((resolve) =>
+        {
+            requestStarted = resolve;
+        });
+        await page.route("**/catalog.json", async (route) =>
+        {
+            requestStarted();
+            await responseReady;
+            await route.continue();
+        });
+        try
+        {
+            await page.goto(`/${locale}/`, { waitUntil: "domcontentloaded" });
+            await requestReady;
+            await page.evaluate(() => document.fonts.ready);
+            const list = page.locator("#book-list");
+            const before = await list.boundingBox();
+            expect(before).not.toBeNull();
+            await expect(page.locator(".toolbar")).toBeHidden();
+            await expect(page.locator(".filter-panel")).toBeHidden();
+            await expect(page.locator("#no-js")).toBeHidden();
+            expect(
+                await page.locator("#search").evaluate((element) =>
+                {
+                    element.focus();
+                    return document.activeElement === element;
+                }),
+            ).toBe(false);
+            releaseResponse();
+            await expect(page.locator(".toolbar")).toBeVisible();
+            await expect(page.locator(".filter-panel")).toBeVisible();
+            const after = await list.boundingBox();
+            expect(after).not.toBeNull();
+            expect(Math.abs(after!.x - before!.x)).toBeLessThanOrEqual(1);
+            expect(Math.abs(after!.y - before!.y)).toBeLessThanOrEqual(1);
+            expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(1);
+            await page.locator("#search").focus();
+            await expect(page.locator("#search")).toBeFocused();
+        }
+        finally
+        {
+            releaseResponse();
+        }
+    });
+}
+
 test("catalog remains visible without JavaScript", async ({ browser }) =>
 {
     const context = await browser.newContext({ javaScriptEnabled: false });
@@ -433,6 +495,9 @@ test("catalog remains visible without JavaScript", async ({ browser }) =>
         ),
     ).toBeVisible();
     await expect(page.locator(".toolbar")).toBeHidden();
+    await expect(page.locator(".toolbar")).toHaveCSS("display", "none");
+    await expect(page.locator(".filter-panel")).toHaveCSS("display", "none");
+    await expect(page.locator(".book-card a").first()).toHaveAttribute("href", /.+/);
     await page.locator("#language-menu summary").click();
     await page.getByRole("link", { name: "繁體中文" }).click();
     await expect(page).toHaveURL(/\/zh-hant\/$/);
@@ -465,7 +530,11 @@ test("static cards remain available when the catalog index fails", async ({
         await staticCards.count(),
     );
     await expect(page.locator("#catalog-load-error")).toBeVisible();
+    await expect(page.locator("#no-js")).toBeHidden();
     await expect(page.locator(".toolbar")).toBeHidden();
+    await expect(page.locator(".toolbar")).toHaveCSS("display", "none");
+    await expect(page.locator(".filter-panel")).toHaveCSS("display", "none");
+    await expect(page.locator(".book-card a").first()).toHaveAttribute("href", /.+/);
 });
 
 test("switcher dropdowns support keyboard and dismissal", async ({ page }) =>

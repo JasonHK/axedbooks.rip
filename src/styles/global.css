@@ -84,3 +84,31 @@
 {
   display: none !important;
 }
+
+.js #no-js
+{
+  display: none;
+}
+
+@layer base
+{
+  .js #catalog-app:not([data-load-failed]) .toolbar[hidden]
+  {
+    display: flex !important;
+    visibility: hidden;
+  }
+
+  .js #catalog-app:not([data-load-failed]) .filter-panel[hidden]
+  {
+    display: grid !important;
+    visibility: hidden;
+  }
+
+  @media (min-width: 901px)
+  {
+    .js #catalog-app:not([data-load-failed]) .filter-panel[hidden]
+    {
+      display: block !important;
+    }
+  }
+}

@@ -39,6 +39,7 @@ const languages = [
 <html lang={htmlLang(locale)} data-theme="archive">
     <head>
         <script is:inline>
+            document.documentElement.classList.add("js");
             try {
                 const savedTheme = localStorage.getItem("axedbooks-theme");
                 document.documentElement.dataset.theme =

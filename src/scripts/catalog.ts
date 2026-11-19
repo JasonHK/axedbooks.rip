@@ -477,6 +477,7 @@ if (app)
     void initialize().catch((error: unknown) =>
     {
         console.error("Unable to load the catalog index", error);
+        app.dataset.loadFailed = "true";
         document.querySelector<HTMLElement>("#catalog-load-error")!.hidden =
             false;
     });
